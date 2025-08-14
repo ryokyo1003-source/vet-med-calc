@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>薬剤費用計算アプリ v2（iPhone最適化）</title>
+<style>
+:root{ --gap:14px; --fz:18px; --pad:14px; --btnh:50px; }
+@media (min-width:768px){ :root{ --fz:16px; --pad:10px; --btnh:44px; } }
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;margin:0;padding:16px;font-size:var(--fz);-webkit-text-size-adjust:100%}
+h1{font-size:calc(var(--fz) + 2px);margin:0 0 8px 0}
+.row{display:flex;gap:var(--gap);flex-wrap:wrap;align-items:center}
+.col{flex:1 1 210px;min-width:210px}
+input,select,button,textarea{width:100%;font-size:var(--fz);padding:var(--pad);box-sizing:border-box;min-height:var(--btnh);border-radius:12px;border:1px solid #d0d0d0}
+button{background:#0a84ff;color:#fff;border:0}
+button.danger{background:#ff3b30}
+textarea{height:240px}
+.card{border:1px solid #e5e5ea;border-radius:14px;padding:14px;margin:14px 0;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.muted{color:#666;font-size:calc(var(--fz) - 3px)}
+.tabs{display:flex;gap:8px;margin-bottom:8px}
+.tab{padding:10px 14px;border:1px solid #d0d0d0;border-radius:999px;background:#f2f2f7;cursor:pointer;user-select:none}
+.tab.active{background:#e7f1ff;border-color:#7aa7ff}
+.section{display:none}.section.active{display:block}
+.drug-row{border:1px dashed #d0d0d0;border-radius:12px;padding:12px;margin:10px 0}
+.actions{display:flex;gap:var(--gap);flex-wrap:wrap}
+.dropdown{position:relative}
+.suggest{position:absolute;top:100%;left:0;right:0;z-index:5;background:#fff;border:1px solid #d0d0d0;border-radius:10px;margin-top:6px;max-height:260px;overflow:auto;box-shadow:0 8px 20px rgba(0,0,0,.08)}
+.suggest div{padding:12px;cursor:pointer}
+.suggest div:active{background:#e7f1ff}
+.switch{display:flex;align-items:center;gap:10px}
+.stickybar{position:sticky;bottom:0;background:#fff;padding-top:8px}
+kbd{background:#f2f2f7;border:1px solid #d0d0d0;border-radius:6px;padding:2px 6px}
+</style>
+</head>
+<body>
+<h1>薬剤費用計算アプリ v2（iPhone最適化）</h1>
+
+<div class="card">
+  <div class="row">
+    <div class="col"><label>体重（kg）</label><input type="number" id="weight" step="0.01" inputmode="decimal" placeholder="例: 4.2"/></div>
+    <div class="col"><label>日数</label><input type="number" id="days" value="7" min="1" inputmode="numeric"/></div>
+    <div class="col"><label>回数/日</label>
+      <select id="timesPerDay"><option value="1">SID（1回/日）</option><option value="2" selected>BID（2回/日）</option><option value="3">TID（3回/日）</option></select>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col switch"><input type="checkbox" id="bunpo"/><label for="bunpo">分包機使用（+20円/回）</label></div>
+    <div class="col muted">ホーム画面追加：<kbd>共有</kbd> → <kbd>ホーム画面に追加</kbd></div>
+  </div>
+  <div class="muted">費用ルール：処方料=1剤目80円/日、2剤目以降40円/日／薬剤料=原価×係数（～10円×3、～50円×2、～100円×1.8、～500円×1.5、501円以上×1.2）、10円単位切り上げ／分割：1/2=+10円/回、1/4=+20円/回／シロップ溶解=+500円</div>
+</div>
+
+<div class="card">
+  <div class="tabs">
+    <div class="tab active" data-target="tab-tabl">錠剤・カプセル</div>
+    <div class="tab" data-target="tab-syrp">シロップ・粉薬</div>
+  </div>
+  <div id="tab-tabl" class="section active"><div id="tabletList"></div><button id="addTablet">＋ 錠剤を追加</button></div>
+  <div id="tab-syrp" class="section">
+    <div id="syrupList"></div>
+    <div class="row"><div class="col switch"><input type="checkbox" id="syrupDissolve"/><label for="syrupDissolve">シロップに溶かす（+500円）</label></div></div>
+    <button id="addSyrup">＋ シロップ・粉薬を追加</button>
+  </div>
+</div>
+
+<div class="card stickybar">
+  <div class="row actions">
+    <button id="calcBtn">計算する</button>
+    <button id="copyBtn">出力をコピー</button>
+    <button id="clearBtn" style="background:#8e8e93">全リセット</button>
+  </div>
+  <label>📋 カルテ貼付用 出力（コピペ）</label>
+  <textarea id="output" readonly></textarea>
+</div>
+
+<div class="card">
+  <h3>📦 薬剤データ（CSV）</h3>
+  <div class="row">
+    <div class="col"><input type="file" id="csvInput" accept=".csv"/></div>
+    <div class="col"><button id="saveCsv" style="background:#34c759">現在のデータをCSV保存</button></div>
+  </div>
+  <div class="muted">CSV列見本：薬剤名,剤型,単価（仕入）,含有量（mg/錠）,含有量（mg/mL）</div>
+</div>
+
+<script>
+function ceil10(y){return Math.ceil(y/10)*10}function byId(id){return document.getElementById(id)}
+const DEFAULT_DRUGS=[{薬剤名:"アモキシシリン",剤型:"錠剤","単価（仕入）":10,"含有量（mg/錠）":100,"含有量（mg/mL）":""},{薬剤名:"エンロフロキサシン",剤型:"錠剤","単価（仕入）":30,"含有量（mg/錠）":50,"含有量（mg/mL）":""},{薬剤名:"メトロニダゾール",剤型:"錠剤","単価（仕入）":20,"
