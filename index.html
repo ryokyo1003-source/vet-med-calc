@@ -2,27 +2,30 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>薬剤費用計算アプリ v3（簡易＋詳細同時表示）</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>薬剤費用計算アプリ v2.3（簡易＋詳細同時表示）</title>
 <style>
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;margin:0;padding:16px;background:#fafafa}
-h1{font-size:20px;margin-bottom:10px}
-.card{background:#fff;border-radius:12px;padding:14px;margin:10px 0;box-shadow:0 1px 3px rgba(0,0,0,0.1)}
-textarea{width:100%;min-height:140px;font-size:14px;padding:8px;border-radius:8px;border:1px solid #ccc;margin-top:6px}
-button{padding:10px 16px;margin:4px;background:#0a84ff;color:#fff;border:none;border-radius:8px;cursor:pointer}
-button.secondary{background:#888}
-label{display:block;margin:6px 0 2px}
-.row{display:flex;flex-wrap:wrap;gap:10px}
-.col{flex:1 1 200px}
+:root{ --gap:14px; --fz:18px; --pad:14px; --btnh:50px; }
+@media (min-width:768px){ :root{ --fz:16px; --pad:10px; --btnh:44px; } }
+*{box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;margin:0;padding:16px;font-size:var(--fz);-webkit-text-size-adjust:100%;background:#fafafa}
+h1{font-size:calc(var(--fz) + 2px);margin:0 0 8px 0}
+.row{display:flex;gap:var(--gap);flex-wrap:wrap;align-items:center}
+.col{flex:1 1 210px;min-width:210px}
+input,select,button,textarea{width:100%;font-size:var(--fz);padding:var(--pad);min-height:var(--btnh);border-radius:12px;border:1px solid #d0d0d0;background:#fff}
+button{background:#0a84ff;color:#fff;border:0;cursor:pointer}
+button.secondary{background:#f2f2f7;color:#111;border:1px solid #d0d0d0}
+textarea{height:140px}
+.card{border:1px solid #e5e5ea;border-radius:14px;padding:14px;margin:14px 0;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 </style>
 </head>
 <body>
-<h1>薬剤費用計算アプリ v3</h1>
+<h1>薬剤費用計算アプリ v2.3（簡易＋詳細同時表示）</h1>
 
 <div class="card">
   <div class="row">
-    <div class="col"><label>体重（kg）</label><input id="weight" type="number" step="0.1"></div>
-    <div class="col"><label>日数</label><input id="days" type="number" value="7"></div>
+    <div class="col"><label>体重（kg）</label><input type="number" id="weight" step="0.01"/></div>
+    <div class="col"><label>日数</label><input type="number" id="days" value="7" min="1"/></div>
     <div class="col"><label>回数/日</label>
       <select id="timesPerDay"><option value="1">SID</option><option value="2" selected>BID</option><option value="3">TID</option></select>
     </div>
@@ -46,11 +49,13 @@ label{display:block;margin:6px 0 2px}
 </div>
 
 <script>
-function ceilYen(v){return Math.ceil(v);} // 1円単位でも切上げ
+function ceil10(y){return Math.ceil(y/10)*10}
+function ceilYen(y){return Math.ceil(y)}
 
 function copyText(id){
   const ta=document.getElementById(id);
-  ta.select();document.execCommand("copy");alert("コピーしました");
+  ta.select();document.execCommand("copy");
+  alert("コピーしました");
 }
 
 document.getElementById("calcBtn").addEventListener("click",()=>{
@@ -60,7 +65,7 @@ document.getElementById("calcBtn").addEventListener("click",()=>{
   
   if(!w||!d||!tpd){alert("体重・日数・回数を入力してください");return;}
   
-  // ★ここではダミーデータで例示。実際はCSVから薬剤リストを参照して計算する処理に差し替える
+  // ★ここではデモとして2剤固定。実際はCSVから読んだ薬剤リストを使う
   const drugs=[
     {name:"トランサミン",unit:250,dose:10,form:"錠剤",cost:30},
     {name:"メトロニダゾール",unit:250,dose:10,form:"錠剤",cost:20}
@@ -73,21 +78,32 @@ document.getElementById("calcBtn").addEventListener("click",()=>{
     const mgPerDose=w*dr.dose;
     const totalMg=mgPerDose*tpd*d;
     const count=Math.ceil(totalMg/dr.unit);
-    const unitPrice=ceilYen(dr.cost*2); // マークアップ仮
+    const unitPrice=ceil10(dr.cost*2);
     const drugCost=ceilYen(unitPrice*count);
     total+=drugCost;
     
+    // 簡易出力用
     if(dr.form==="錠剤"){
       simpleList.push(`${dr.name}${dr.unit}mg ${count}t`);
-      detailList.push(`【錠剤】${dr.name}錠 ${dr.unit}mg/錠\n${dr.dose}mg/kg × ${tpd}回 × ${d}日分（体重：${w}kg）\n→ 必要量：${Math.round(totalMg)}mg（${count}錠）\n\n薬剤料：${drugCost}円（${unitPrice}円/錠 × ${count}錠）\n`);
     }
+    
+    // 詳細出力用
+    detailList.push(`【${dr.form}】${dr.name} ${dr.unit}mg/${dr.form==="錠剤"?"錠":"mL"}
+${dr.dose}mg/kg × ${tpd}回 × ${d}日分（体重：${w}kg）
+→ 必要量：${Math.round(totalMg)}mg（${count}${dr.form==="錠剤"?"錠":"mL"}）
+
+薬剤料：${drugCost}円（${unitPrice}円/${dr.form==="錠剤"?"錠":"mL"} × ${count}${dr.form==="錠剤"?"錠":"mL"}）
+`);
   });
   
   const scriptFee=(80+40*(drugs.length-1))*d;
   total+=scriptFee;
   
-  // 簡易出力
-  const simple=`内服薬＠${80+40*(drugs.length-1)} x${d}\n${simpleList.join("  ")}\n粉 ${tpd*d}分包 BID ${d}日分`;
+  // 簡易モード出力
+  const simple=`内服薬＠${80+40*(drugs.length-1)} x${d}
+${simpleList.join("  ")}
+粉 ${tpd*d}分包 BID ${d}日分
+シロップ ${tpd*d}mL BID ${d}日分`;
   document.getElementById("outputSimple").value=simple;
   
   // 詳細出力
