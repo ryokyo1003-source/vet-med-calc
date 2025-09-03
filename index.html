@@ -379,7 +379,7 @@ function buildSimpleLine({tablet, syrup}){
   const itemsTotal = tablet.itemsCount + syrup.itemsCount;
   const perDay = itemsTotal>0 ? (80 + 40*(itemsTotal-1)) : 0;
 
-  const line1 = `内服薬＠${perDay} x${d}`;
+  const line1 = `内服薬＠${perDay} x${tpd*d}`;
   const line2 = tablet.simplePieces.join("  ") || "";
   const powderLine = (itemsTotal>0) ? `粉 ${tpd*d}分包 BID ${d}日分` : "";
   const syrupMl = syrup.syrupMlTotal>0 ? Math.ceil(syrup.syrupMlTotal*100)/100 : 0;
