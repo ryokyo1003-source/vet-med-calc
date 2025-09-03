@@ -39,7 +39,6 @@ kbd{background:#f2f2f7;border:1px solid #d0d0d0;border-radius:6px;padding:2px 6p
 /* 右の出力を見やすく */
 .panel-right textarea{height:220px}
 .small{font-size:0.85em;color:#666}
-.hr{border:none;border-top:1px dashed #ddd;margin:10px 0}
 </style>
 </head>
 <body>
@@ -91,7 +90,7 @@ kbd{background:#f2f2f7;border:1px solid #d0d0d0;border-radius:6px;padding:2px 6p
         <div class="col"><input type="file" id="csvInput" accept=".csv"/></div>
         <div class="col"><button id="saveCsv" class="secondary">現在のデータをCSV保存</button></div>
       </div>
-      <div class="small">想定列：薬剤名, 剤型, 単価（仕入）, 含有量（mg/錠）<br>※カプセル・チュアブルは「錠剤」扱いとしてプルダウンに入ります</div>
+      <div class="small">想定列：薬剤名, 剤型, 単価（仕入）, 含有量（mg/錠）／（任意）含有量（mg/mL）<br>※カプセル・チュアブルは「錠剤」扱いでプルダウンに入ります</div>
     </div>
   </div>
 
@@ -118,7 +117,7 @@ kbd{background:#f2f2f7;border:1px solid #d0d0d0;border-radius:6px;padding:2px 6p
   </div>
 </div>
 
-<!-- ====== datalist（CSVから動的生成） ====== -->
+<!-- プルダウン用 datalist（CSVから動的生成） -->
 <datalist id="drugListTablet"></datalist>
 <datalist id="drugListSyrup"></datalist>
 
@@ -129,18 +128,16 @@ function ceilYen(y){return Math.ceil(y)}
 function byId(id){return document.getElementById(id)}
 const NOTES_KEY = "drugNotesV1"; // 薬剤メモの保存キー
 
-/* ========= データロード（初期） ========= */
+/* ========= データ ========= */
 let DRUGS = []; // {薬剤名, 剤型, 単価（仕入）, 含有量（mg/錠）, 含有量（mg/mL）}
 const DEFAULT_DRUGS=[
   {薬剤名:"トランサミン錠 250mg", 剤型:"錠", "単価（仕入）":30, "含有量（mg/錠）":250, "含有量（mg/mL）":""},
   {薬剤名:"メトロニダゾール錠 250mg", 剤型:"錠", "単価（仕入）":20, "含有量（mg/錠）":250, "含有量（mg/mL）":""}
 ];
-
 function loadDefaultDrugs(){ return JSON.parse(localStorage.getItem("drugMasterV3")||"null") || DEFAULT_DRUGS; }
 function saveDrugs(list){ localStorage.setItem("drugMasterV3", JSON.stringify(list)); }
 function loadNotes(){ return JSON.parse(localStorage.getItem(NOTES_KEY)||"{}"); }
 function saveNotes(map){ localStorage.setItem(NOTES_KEY, JSON.stringify(map)); }
-
 DRUGS = loadDefaultDrugs();
 
 /* ========= タブ切替 ========= */
@@ -164,13 +161,11 @@ function refreshDatalists(){
     const form = (d.剤型||"").toString();
     const opt = document.createElement("option");
     opt.value = d.薬剤名;
-    // 錠剤系：錠/カプセル/チュアブル → 錠剤側へ
     if(/錠|カプセル|チュアブル/i.test(form) || form==="" ){
       listTab.appendChild(opt);
     }else if(/シロップ|液|内用液|懸濁|粉|散/i.test(form)){
       listSyrp.appendChild(opt);
     }else{
-      // 不明はとりあえず錠剤側へ
       listTab.appendChild(opt);
     }
   });
@@ -211,7 +206,7 @@ function makeDrugRow({type}){
   // 削除
   row.querySelector(".removeBtn").addEventListener("click",()=>row.remove());
 
-  // プルダウン選択 → 含有量/単価の自動設定＋メモ復元
+  // 選択時に含有量/単価を自動セット＋メモ復元
   const nameInput = row.querySelector(".drugName");
   const unitInput = row.querySelector(".unitMg");
   const costInput = row.querySelector(".cost");
@@ -221,14 +216,12 @@ function makeDrugRow({type}){
   function loadDrugToRow(name){
     const d = DRUGS.find(x=>x.薬剤名===name);
     if(!d) return;
-    // 剤型が錠剤系か/シロップ系かで適切な含有量をセット
     if(type==="錠剤"){
       unitInput.value = d["含有量（mg/錠）"] || "";
     }else{
       unitInput.value = d["含有量（mg/mL）"] || "";
     }
     costInput.value = d["単価（仕入）"] || "";
-    // メモ復元
     const notes = loadNotes();
     noteArea.value = notes[name] || "";
   }
@@ -255,7 +248,7 @@ function addTablet(){ tabletList.appendChild(makeDrugRow({type:"錠剤"})); }
 function addSyrup(){ syrupList.appendChild(makeDrugRow({type:"シロップ"})); }
 byId("addTablet").addEventListener("click",addTablet);
 byId("addSyrup").addEventListener("click",addSyrup);
-addTablet(); // 初回1行
+addTablet(); // 初期1行
 
 /* ========= CSV読込／保存 ========= */
 byId("csvInput").addEventListener("change",(ev)=>{
@@ -266,8 +259,13 @@ byId("csvInput").addEventListener("change",(ev)=>{
     const lines=text.split(/\r?\n/).filter(x=>x.trim().length>0);
     const header=lines[0].split(",");
     function col(n){ return header.indexOf(n); }
-    const idx={name:col("薬剤名"),type:col("剤型"),cost:col("単価（仕入）"),unitTab:col("含有量（mg/錠）"),unitMl:col("含有量（mg/mL)")};
-    // 入っていないCSV（今回のように4列）にも対応
+    const idx={
+      name:col("薬剤名"),
+      type:col("剤型"),
+      cost:col("単価（仕入）"),
+      unitTab:col("含有量（mg/錠）"),
+      unitMl:col("含有量（mg/mL）")
+    };
     const list=[];
     for(let i=1;i<lines.length;i++){
       const cols=lines[i].split(",");
@@ -307,7 +305,7 @@ function calcSection(type, container){
   let detailText=""; let subtotal=0; let packFee=0; let splitFee=0; let capsuleFee=0; let itemsCount=0;
 
   // 簡易用
-  let simplePieces=[]; // 錠剤の "薬名250mg 6t"
+  let simplePieces=[]; // 錠剤の "薬名◯mg 6t"
   let powderCount=0;
   let syrupMlTotal=0;
 
@@ -337,6 +335,7 @@ function calcSection(type, container){
 
       subtotal += drugCost; packFee += thisPack; splitFee += thisSplitFee; capsuleFee += thisCapsuleFee; itemsCount++;
 
+      // 詳細
       detailText += `【錠剤】${name} ${unitMg}mg/錠
 ${dose}mg/kg × ${timesPerDay}回 × ${days}日分（体重：${weight}kg）
 → 必要量：${Math.round(totalMg)}mg（${tabletCount}錠）
@@ -348,10 +347,12 @@ ${dose}mg/kg × ${timesPerDay}回 × ${days}日分（体重：${weight}kg）
       if(thisCapsuleFee>0) detailText += `カプセル詰め：${thisCapsuleFee}円\n`;
       detailText += `\n`;
 
-      simplePieces.push(`${name.replace(/.*?(\d+mg).*/,'$\'')||name}${unitMg?'' : ''}`.trim() || `${name}${unitMg}mg`) // fallback
-      simplePieces[simplePieces.length-1] = `${name.replace(/\s+/g,'')}${unitMg?unitMg+'mg':''} ${tabletCount}t`;
+      // 簡易ラベル（mg重複防止）
+      const hasMg = /(mg|㎎)/i.test(name);
+      const label = hasMg ? name.replace(/\s+/g,'') : `${name.replace(/\s+/g,'')}${unitMg}mg`;
+      simplePieces.push(`${label} ${tabletCount}t`);
 
-    }else{
+    }else{ // シロップ/粉薬
       const totalMl = totalMg / unitMg;
       const mlCount = Math.ceil(totalMl * 100) / 100; // 0.01mL切上げ
       const pricePer = ceil10(cost * markupFor(cost));
@@ -373,26 +374,28 @@ ${dose}mg/kg × ${timesPerDay}回 × ${days}日分（体重：${weight}kg）
   return { detailText, subtotal, packFee, splitFee, capsuleFee, itemsCount, simplePieces, powderCount, syrupMlTotal };
 }
 
-function buildSimpleLine({tablet, syrup, total}){
+/* ========= 簡易（カルテ用） ========= */
+function buildSimpleLine({tablet, syrup}){
   const d   = parseInt(byId("days").value||"0");
   const tpd = parseInt(byId("timesPerDay").value||"0");
   const doses = tpd * d;
+  const itemsTotal = tablet.itemsCount + syrup.itemsCount;
 
-  // 合計 ÷ 回数×日数 を 10円単位切り上げ
+  // calcBtnで格納した合計を利用
+  const total = (typeof window.__lastTotal === "number") ? window.__lastTotal : 0;
   const unit = doses > 0 ? ceil10(total / doses) : 0;
 
   const line1 = `内服薬＠${unit} x${doses}`;
 
   const line2 = tablet.simplePieces.join("  ") || "";
 
-  const powderLine = (tablet.itemsCount + syrup.itemsCount) > 0
-    ? `粉 ${doses}分包 BID ${d}日分` : "";
+  const freqLabel = (tpd===1 ? "SID" : (tpd===2 ? "BID" : "TID"));
+  const powderLine = (itemsTotal>0) ? `粉 ${doses}分包 ${freqLabel} ${d}日分` : "";
 
   const syrupMl = syrup.syrupMlTotal>0 ? Math.ceil(syrup.syrupMlTotal*100)/100 : 0;
-  const syrupLine = (syrupMl>0) ? `シロップ ${syrupMl.toFixed(2)}mL BID ${d}日分` : "";
+  const syrupLine = (syrupMl>0) ? `シロップ ${syrupMl.toFixed(2)}mL ${freqLabel} ${d}日分` : "";
 
   return [line1, line2, powderLine, syrupLine].filter(Boolean).join("\n");
-}
 }
 
 /* ========= 計算ボタン ========= */
@@ -407,9 +410,11 @@ byId("calcBtn").addEventListener("click",()=>{
 
   const total = ceilYen(tablet.subtotal + syrup.subtotal + tablet.packFee + tablet.splitFee + tablet.capsuleFee + scriptFee + syrupDissolve);
 
+  // buildSimpleLine で参照できるよう合計を共有
+  window.__lastTotal = total;
+
   // ① 簡易
-  - byId("outputSimple").value = buildSimpleLine({tablet, syrup});
-+ byId("outputSimple").value = buildSimpleLine({tablet, syrup, total});
+  byId("outputSimple").value = buildSimpleLine({tablet, syrup});
 
   // ② 詳細
   let detail = "";
@@ -429,8 +434,7 @@ function tryClipboard(id){ const ta=byId(id); ta.select(); document.execCommand(
 byId("copySimple").addEventListener("click",()=>tryClipboard("outputSimple"));
 byId("copyDetail").addEventListener("click",()=>tryClipboard("outputDetail"));
 byId("clearBtn").addEventListener("click",()=>{
-  localStorage.removeItem("drugMasterV3");
-  // メモは残す（必要なら NOTES_KEY も消してください）
+  localStorage.removeItem("drugMasterV3"); // マスターのみリセット（メモは残す）
   location.reload();
 });
 
