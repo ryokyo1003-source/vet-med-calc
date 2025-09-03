@@ -373,18 +373,26 @@ ${dose}mg/kg × ${timesPerDay}回 × ${days}日分（体重：${weight}kg）
   return { detailText, subtotal, packFee, splitFee, capsuleFee, itemsCount, simplePieces, powderCount, syrupMlTotal };
 }
 
-function buildSimpleLine({tablet, syrup}){
-  const d=parseInt(byId("days").value||"0");
-  const tpd=parseInt(byId("timesPerDay").value||"0");
-  const itemsTotal = tablet.itemsCount + syrup.itemsCount;
-  const perDay = itemsTotal>0 ? (80 + 40*(itemsTotal-1)) : 0;
+function buildSimpleLine({tablet, syrup, total}){
+  const d   = parseInt(byId("days").value||"0");
+  const tpd = parseInt(byId("timesPerDay").value||"0");
+  const doses = tpd * d;
 
-  const line1 = `内服薬＠${perDay} x${tpd*d}`;
+  // 合計 ÷ 回数×日数 を 10円単位切り上げ
+  const unit = doses > 0 ? ceil10(total / doses) : 0;
+
+  const line1 = `内服薬＠${unit} x${doses}`;
+
   const line2 = tablet.simplePieces.join("  ") || "";
-  const powderLine = (itemsTotal>0) ? `粉 ${tpd*d}分包 BID ${d}日分` : "";
+
+  const powderLine = (tablet.itemsCount + syrup.itemsCount) > 0
+    ? `粉 ${doses}分包 BID ${d}日分` : "";
+
   const syrupMl = syrup.syrupMlTotal>0 ? Math.ceil(syrup.syrupMlTotal*100)/100 : 0;
   const syrupLine = (syrupMl>0) ? `シロップ ${syrupMl.toFixed(2)}mL BID ${d}日分` : "";
-  return [line1,line2,powderLine,syrupLine].filter(Boolean).join("\n");
+
+  return [line1, line2, powderLine, syrupLine].filter(Boolean).join("\n");
+}
 }
 
 /* ========= 計算ボタン ========= */
@@ -400,7 +408,8 @@ byId("calcBtn").addEventListener("click",()=>{
   const total = ceilYen(tablet.subtotal + syrup.subtotal + tablet.packFee + tablet.splitFee + tablet.capsuleFee + scriptFee + syrupDissolve);
 
   // ① 簡易
-  byId("outputSimple").value = buildSimpleLine({tablet, syrup});
+  - byId("outputSimple").value = buildSimpleLine({tablet, syrup});
++ byId("outputSimple").value = buildSimpleLine({tablet, syrup, total});
 
   // ② 詳細
   let detail = "";
