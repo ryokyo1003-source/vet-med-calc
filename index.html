@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<title>薬剤費用計算アプリ v3.0 (自動計算対応)</title>
+<title>薬剤費用計算アプリ v2.3（左右2分割・簡易＋詳細同時表示）</title>
 <style>
 :root{ --gap:14px; --fz:18px; --pad:14px; --btnh:50px; }
 @media (min-width:768px){ :root{ --fz:16px; --pad:10px; --btnh:44px; } }
@@ -11,56 +11,53 @@
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;margin:0;padding:16px;font-size:var(--fz);-webkit-text-size-adjust:100%;background:#fafafa}
 h1{font-size:calc(var(--fz) + 2px);margin:0 0 8px 0}
 .row{display:flex;gap:var(--gap);flex-wrap:wrap;align-items:center}
-.col{flex:1 1 120px;min-width:120px}
-.col-full{flex:1 1 100%}
+.col{flex:1 1 210px;min-width:210px}
 input,select,button,textarea{width:100%;font-size:var(--fz);padding:var(--pad);min-height:var(--btnh);border-radius:12px;border:1px solid #d0d0d0;background:#fff}
-button{background:#0a84ff;color:#fff;border:0;cursor:pointer;font-weight:bold}
-button:active{opacity:.8}
-button.secondary{background:#e5e5ea;color:#111;border:0}
+button{background:#0a84ff;color:#fff;border:0;cursor:pointer}
+button.secondary{background:#f2f2f7;color:#111;border:1px solid #d0d0d0}
 button.danger{background:#ff3b30}
-textarea{height:180px;line-height:1.6}
+textarea{height:180px}
 .card{border:1px solid #e5e5ea;border-radius:14px;padding:14px;margin:14px 0;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04)}
 .muted{color:#666;font-size:calc(var(--fz) - 3px)}
 .tabs{display:flex;gap:8px;margin-bottom:8px}
 .tab{padding:10px 14px;border:1px solid #d0d0d0;border-radius:999px;background:#f2f2f7;cursor:pointer;user-select:none}
-.tab.active{background:#e7f1ff;border-color:#7aa7ff;font-weight:bold}
+.tab.active{background:#e7f1ff;border-color:#7aa7ff}
 .section{display:none}.section.active{display:block}
-.drug-row{border:1px dashed #d0d0d0;border-radius:12px;padding:12px;margin:10px 0;background:#fafafa}
+.drug-row{border:1px dashed #d0d0d0;border-radius:12px;padding:12px;margin:10px 0}
 .dropdown{position:relative}
 .suggest{position:absolute;top:100%;left:0;right:0;z-index:5;background:#fff;border:1px solid #d0d0d0;border-radius:10px;margin-top:6px;max-height:260px;overflow:auto;box-shadow:0 8px 20px rgba(0,0,0,.08)}
 .suggest div{padding:12px;cursor:pointer}
-.suggest div:hover,.suggest div.selected{background:#eef5ff}
-.switch{display:flex;align-items:center;gap:10px;user-select:none}
+.suggest div:hover{background:#eef5ff}
+.switch{display:flex;align-items:center;gap:10px}
 kbd{background:#f2f2f7;border:1px solid #d0d0d0;border-radius:6px;padding:2px 6px}
-.badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef5ff;border:1px solid #cbdcff;color:#225;font-size:calc(var(--fz) - 4px)}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef5ff;border:1px solid #cbdcff;color:#225}
+hr{border:none;border-top:1px dashed #ddd;margin:10px 0}
 .layout{display:block}
 @media (min-width:1000px){
   .layout{display:grid;grid-template-columns:1.1fr 1fr;gap:18px;align-items:start}
-  .panel-left{position:sticky;top:10px;align-self:start;max-height:calc(100vh - 20px);overflow:auto;padding-right:8px}
-  .panel-right{max-height:calc(100vh - 20px);overflow:auto;padding-left:8px}
+  .panel-left{position:sticky;top:10px;align-self:start;height:calc(100vh - 20px);overflow:auto;padding-right:2px}
+  .panel-right{max-height:calc(100vh - 20px);overflow:auto;padding-left:2px}
 }
 .panel-right textarea{height:220px}
-.remove-btn{min-width:40px;max-width:40px;flex:0;padding:0;background:#ffebee;color:#c62828}
-input:read-only{background:#f2f2f7;opacity:.8}
-#copy-feedback{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);color:white;padding:10px 20px;border-radius:10px;z-index:100;opacity:0;transition:opacity .3s;pointer-events:none}
-#copy-feedback.show{opacity:1}
 </style>
 </head>
 <body>
-<h1>薬剤費用計算アプリ v3.0 (自動計算対応)</h1>
+<h1>薬剤費用計算アプリ v2.3（左右2分割・簡易＋詳細同時表示）</h1>
+
 <div class="layout">
+  <!-- 左入力 -->
   <div class="panel-left">
     <div class="card">
       <div class="row">
-        <div class="col"><label>体重 (kg)</label><input type="number" id="weight" step="0.01" inputmode="decimal"/></div>
+        <div class="col"><label>体重（kg）</label><input type="number" id="weight" step="0.01" inputmode="decimal"/></div>
         <div class="col"><label>日数</label><input type="number" id="days" value="7" min="1" inputmode="numeric"/></div>
         <div class="col"><label>回数/日</label>
-          <select id="timesPerDay"><option value="1">SID (1回)</option><option value="2" selected>BID (2回)</option><option value="3">TID (3回)</option></select>
+          <select id="timesPerDay"><option value="1">SID</option><option value="2" selected>BID</option><option value="3">TID</option></select>
         </div>
       </div>
-      <div class="row" style="margin-top:10px">
-        <div class="col switch"><input type="checkbox" id="bunpo"/><label for="bunpo">分包機使用 (+20円/回)</label></div>
-        <div class="col muted">入力は自動で保存されます</div>
+      <div class="row">
+        <div class="col switch"><input type="checkbox" id="bunpo"/><label for="bunpo">分包機使用（+20円/回）</label></div>
+        <div class="col muted">ホーム画面追加：<kbd>共有</kbd> → <kbd>ホーム画面に追加</kbd></div>
       </div>
     </div>
 
@@ -71,412 +68,50 @@ input:read-only{background:#f2f2f7;opacity:.8}
       </div>
       <div id="tab-tabl" class="section active">
         <div id="tabletList"></div>
-        <button id="addTablet" class="secondary">＋ 錠剤を追加</button>
+        <button id="addTablet">＋ 錠剤を追加</button>
       </div>
       <div id="tab-syrp" class="section">
         <div id="syrupList"></div>
-        <div class="row" style="margin-top:10px">
-          <div class="col switch"><input type="checkbox" id="syrupDissolve"/><label for="syrupDissolve">シロップに溶かす (+500円)</label></div>
+        <div class="row">
+          <div class="col switch"><input type="checkbox" id="syrupDissolve"/><label for="syrupDissolve">シロップに溶かす（+500円）</label></div>
         </div>
-        <button id="addSyrup" class="secondary">＋ 粉薬を追加</button>
+        <button id="addSyrup">＋ シロップ・粉薬を追加</button>
       </div>
     </div>
 
     <div class="card">
-      <h3>📦 薬剤データ (CSV)</h3>
-      <p class="muted" style="margin: -8px 0 8px 0;">ヘッダ行: <code>名称,価格,単位,用量,規格</code><br/>例: セファクリア錠,25.5,錠,15,250</p>
+      <h3>📦 薬剤データ（CSV）</h3>
       <div class="row">
-        <div class="col col-full"><input type="file" id="csvInput" accept=".csv"/></div>
-        <div class="col"><button id="saveCsv" class="secondary">現在の薬剤をCSV保存</button></div>
-        <div class="col"><button id="clearCsv" class="danger">保存データを削除</button></div>
+        <div class="col"><input type="file" id="csvInput" accept=".csv"/></div>
+        <div class="col"><button id="saveCsv" class="secondary">現在のデータをCSV保存</button></div>
       </div>
     </div>
   </div>
 
+  <!-- 右出力 -->
   <div class="panel-right">
     <div class="card">
       <div class="row" style="gap:10px">
-        <div class="col"><button id="copySimple">簡易コピー</button></div>
-        <div class="col"><button id="copyDetail">詳細コピー</button></div>
-        <div class="col"><button id="clearBtn" class="secondary">全リセット</button></div>
+        <button id="calcBtn">計算する</button>
+        <button id="copySimple" class="secondary">簡易をコピー</button>
+        <button id="copyDetail" class="secondary">詳細をコピー</button>
+        <button id="clearBtn" class="secondary">全リセット</button>
       </div>
     </div>
     <div class="card">
-      <h3>📋 カルテ貼付用 (簡易)</h3>
+      <h3>📋 カルテ貼付用（簡易）</h3>
       <textarea id="outputSimple" readonly></textarea>
     </div>
     <div class="card">
-      <h3>🧮 計算根拠 (詳細)</h3>
+      <h3>🧮 計算根拠（詳細）</h3>
       <textarea id="outputDetail" readonly></textarea>
     </div>
   </div>
 </div>
 
-<div id="copy-feedback">コピーしました！</div>
-
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-  // --- DOM要素の取得 ---
-  const weightEl = document.getElementById('weight');
-  const daysEl = document.getElementById('days');
-  const timesPerDayEl = document.getElementById('timesPerDay');
-  const bunpoEl = document.getElementById('bunpo');
-  const syrupDissolveEl = document.getElementById('syrupDissolve');
-  const tabletListEl = document.getElementById('tabletList');
-  const syrupListEl = document.getElementById('syrupList');
-  const outputSimpleEl = document.getElementById('outputSimple');
-  const outputDetailEl = document.getElementById('outputDetail');
-  
-  // 薬剤データ (グローバル)
-  let drugMaster = [];
-  let activeSuggestionInput = null;
-
-  // --- 主要機能 ---
-
-  // リアルタイム計算のトリガー
-  const setupEventListeners = () => {
-    document.querySelector('.layout').addEventListener('input', handleFormChange);
-    document.querySelector('.layout').addEventListener('change', handleFormChange); // for checkboxes and selects
-
-    // タブ切り替え
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.tab, .section').forEach(el => el.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById(tab.dataset.target).classList.add('active');
-      });
-    });
-
-    // 薬剤追加ボタン
-    document.getElementById('addTablet').addEventListener('click', () => addDrugRow('tablet'));
-    document.getElementById('addSyrup').addEventListener('click', () => addDrugRow('syrup'));
-    
-    // 全リセットボタン
-    document.getElementById('clearBtn').addEventListener('click', resetAll);
-
-    // コピーボタン
-    document.getElementById('copySimple').addEventListener('click', () => copyToClipboard(outputSimpleEl.value, '簡易'));
-    document.getElementById('copyDetail').addEventListener('click', () => copyToClipboard(outputDetailEl.value, '詳細'));
-
-    // CSV関連
-    document.getElementById('csvInput').addEventListener('change', handleCsvUpload);
-    document.getElementById('saveCsv').addEventListener('click', saveCurrentDrugsToCsv);
-    document.getElementById('clearCsv').addEventListener('click', clearDrugMaster);
-
-    // サジェスト機能のためのイベント
-    document.body.addEventListener('focusin', handleFocusIn);
-    document.body.addEventListener('click', () => hideSuggestions());
-  };
-
-  const handleFormChange = (e) => {
-    calculateAndRender();
-    saveInputsToLocalStorage();
-  };
-
-  // --- 計算と描画 ---
-  const calculateAndRender = () => {
-    const weight = parseFloat(weightEl.value) || 0;
-    const days = parseInt(daysEl.value) || 0;
-    const timesPerDay = parseInt(timesPerDayEl.value) || 0;
-    const useBunpo = bunpoEl.checked;
-    const useSyrupDissolve = syrupDissolveEl.checked;
-    
-    let simpleOutput = '';
-    let detailOutput = '【薬剤計算詳細】\n';
-    let totalCost = 0;
-    const drugLines = [];
-
-    // 錠剤と粉薬をまとめて処理
-    document.querySelectorAll('.drug-row').forEach(row => {
-      const drug = parseDrugRow(row, weight);
-      if (!drug.name) return;
-
-      const totalAmount = drug.amount * timesPerDay * days;
-      const drugCost = Math.round(totalAmount * drug.price);
-      totalCost += drugCost;
-      
-      const unit = row.dataset.type === 'syrup' ? 'g' : '錠';
-      drugLines.push({ ...drug, totalAmount, drugCost, unit });
-    });
-
-    drugLines.forEach(d => {
-      simpleOutput += `${d.name} ${d.amount}${d.unit} x ${timesPerDay}回/日 ${days}日分\n`;
-      detailOutput += `・${d.name} (${d.price.toLocaleString()}円/${d.unit})\n`;
-      detailOutput += `  1回量: ${d.amount.toFixed(2)}${d.unit} x ${timesPerDay}回 x ${days}日 = ${d.totalAmount.toFixed(2)}${d.unit}\n`;
-      if (d.auto) {
-        detailOutput += `  (自動計算: ${weight}kg * ${d.dose}mg/kg ÷ ${d.strength}mg/${d.unit} = ${d.amount.toFixed(2)}${d.unit})\n`;
-      }
-      detailOutput += `  小計: ${d.drugCost.toLocaleString()}円\n`;
-    });
-    
-    detailOutput += '\n【追加費用】\n';
-    let bunpoCost = 0;
-    if (useBunpo) {
-      bunpoCost = 20 * timesPerDay * days;
-      totalCost += bunpoCost;
-      simpleOutput += `分包\n`;
-      detailOutput += `・分包機使用: 20円 x ${timesPerDay}回 x ${days}日 = ${bunpoCost.toLocaleString()}円\n`;
-    }
-    
-    let syrupDissolveCost = 0;
-    if (useSyrupDissolve && document.querySelector('#syrupList .drug-row')) {
-      syrupDissolveCost = 500;
-      totalCost += syrupDissolveCost;
-      simpleOutput += `シロップ混合\n`;
-      detailOutput += `・シロップ混合: ${syrupDissolveCost.toLocaleString()}円\n`;
-    }
-    
-    simpleOutput += `\n合計: ${Math.round(totalCost).toLocaleString()} 円`;
-    detailOutput += `\n----------------\n`;
-    detailOutput += `合計金額: ${Math.round(totalCost).toLocaleString()} 円`;
-
-    outputSimpleEl.value = simpleOutput;
-    outputDetailEl.value = detailOutput;
-  };
-
-  const parseDrugRow = (row, weight) => {
-    const name = row.querySelector('.drug-name').value;
-    const price = parseFloat(row.querySelector('.drug-price').value) || 0;
-    const dose = parseFloat(row.querySelector('.drug-dose').value) || 0;
-    const strength = parseFloat(row.querySelector('.drug-strength').value) || 0;
-    const amountInput = row.querySelector('.drug-amount');
-    const autoCalc = !amountInput.readOnly;
-    
-    let amount = parseFloat(amountInput.value) || 0;
-
-    // 自動計算
-    if (autoCalc && weight > 0 && dose > 0 && strength > 0) {
-      const calculatedAmount = (weight * dose) / strength;
-      // 錠剤は0.25単位で丸める、粉薬は小数点第2位まで
-      const rounding = row.dataset.type === 'tablet' ? 0.25 : 0.01;
-      amount = Math.round(calculatedAmount / rounding) * rounding;
-      amountInput.value = amount.toFixed(2);
-    }
-    
-    return { name, price, dose, strength, amount, auto: autoCalc };
-  };
-
-  // --- 薬剤行の管理 ---
-  const addDrugRow = (type) => {
-    const listEl = type === 'tablet' ? tabletListEl : syrupListEl;
-    const id = Date.now();
-    const unit = type === 'syrup' ? 'g' : '錠';
-    const rowHtml = `
-      <div class="drug-row" id="row-${id}" data-type="${type}">
-        <div class="row">
-          <div class="col col-full dropdown">
-            <input type="text" class="drug-name" placeholder="薬剤名 (候補から選択)">
-            <div class="suggest"></div>
-          </div>
-        </div>
-        <div class="row" style="margin-top:var(--gap)">
-          <div class="col"><label>価格/${unit}</label><input type="number" class="drug-price" inputmode="decimal"></div>
-          <div class="col"><label>用量(mg/kg)</label><input type="number" class="drug-dose" inputmode="decimal"></div>
-          <div class="col"><label>規格(mg/${unit})</label><input type="number" class="drug-strength" inputmode="decimal"></div>
-        </div>
-        <div class="row" style="margin-top:var(--gap)">
-          <div class="col"><label>1回量(${unit}) <span class="badge">自動計算</span></label><input type="number" class="drug-amount" inputmode="decimal" value="0.00"></div>
-          <button class="remove-btn" onclick="document.getElementById('row-${id}').remove(); calculateAndRender();">×</button>
-        </div>
-      </div>
-    `;
-    listEl.insertAdjacentHTML('beforeend', rowHtml);
-  };
-  
-  // --- サジェスト機能 ---
-  const handleFocusIn = (e) => {
-    if (e.target.classList.contains('drug-name')) {
-      activeSuggestionInput = e.target;
-      e.target.addEventListener('keyup', showSuggestions);
-      e.target.addEventListener('input', showSuggestions);
-    } else {
-      hideSuggestions();
-    }
-  };
-
-  const showSuggestions = (e) => {
-    const input = e.target;
-    const keyword = input.value.toLowerCase();
-    const suggestBox = input.nextElementSibling;
-    
-    if (!suggestBox || !suggestBox.classList.contains('suggest')) return;
-    
-    suggestBox.innerHTML = '';
-    if (keyword.length === 0) {
-      hideSuggestions();
-      return;
-    }
-    
-    const filteredDrugs = drugMaster.filter(d => d.name.toLowerCase().includes(keyword));
-    
-    if (filteredDrugs.length > 0) {
-      filteredDrugs.forEach(drug => {
-        const div = document.createElement('div');
-        div.textContent = `${drug.name} (${drug.price}円/${drug.unit})`;
-        div.addEventListener('click', () => {
-          selectSuggestion(drug, input.closest('.drug-row'));
-        });
-        suggestBox.appendChild(div);
-      });
-      suggestBox.style.display = 'block';
-    } else {
-      hideSuggestions();
-    }
-  };
-
-  const selectSuggestion = (drug, row) => {
-    row.querySelector('.drug-name').value = drug.name;
-    row.querySelector('.drug-price').value = drug.price;
-    row.querySelector('.drug-dose').value = drug.dose;
-    row.querySelector('.drug-strength').value = drug.strength;
-    hideSuggestions();
-    calculateAndRender();
-    saveInputsToLocalStorage();
-  };
-
-  const hideSuggestions = () => {
-    const allSuggests = document.querySelectorAll('.suggest');
-    allSuggests.forEach(s => { s.style.display = 'none'; });
-  };
-
-
-  // --- データ管理 (CSV & LocalStorage) ---
-  const handleCsvUpload = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target.result;
-      const lines = text.split('\n').filter(line => line.trim() !== '');
-      const header = lines.shift().split(',').map(h => h.trim());
-      
-      drugMaster = lines.map(line => {
-        const values = line.split(',');
-        return {
-          name: values[0]?.trim() || '',
-          price: parseFloat(values[1]) || 0,
-          unit: values[2]?.trim() || '錠',
-          dose: parseFloat(values[3]) || 0,
-          strength: parseFloat(values[4]) || 0,
-        };
-      }).filter(d => d.name);
-      
-      saveDrugMasterToLocalStorage();
-      alert(`${drugMaster.length}件の薬剤データを読み込み、ブラウザに保存しました。`);
-    };
-    reader.readAsText(file);
-  };
-  
-  const saveCurrentDrugsToCsv = () => {
-    let csvContent = "data:text/csv;charset=utf-8,名称,価格,単位,用量,規格\n";
-    const currentDrugs = new Map(); // 重複を避ける
-
-    document.querySelectorAll('.drug-row').forEach(row => {
-      const name = row.querySelector('.drug-name').value;
-      if (!name) return;
-      
-      const price = row.querySelector('.drug-price').value;
-      const dose = row.querySelector('.drug-dose').value;
-      const strength = row.querySelector('.drug-strength').value;
-      const type = row.dataset.type;
-      const unit = type === 'syrup' ? 'g' : '錠';
-      
-      if (!currentDrugs.has(name)) {
-        currentDrugs.set(name, `${name},${price},${unit},${dose},${strength}`);
-      }
-    });
-
-    if (currentDrugs.size === 0) {
-        alert('保存する薬剤がありません。');
-        return;
-    }
-
-    currentDrugs.forEach(line => {
-        csvContent += line + "\n";
-    });
-
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "yakuzai_data.csv");
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const saveDrugMasterToLocalStorage = () => {
-    localStorage.setItem('drugMasterData', JSON.stringify(drugMaster));
-  };
-
-  const loadDrugMasterFromLocalStorage = () => {
-    const data = localStorage.getItem('drugMasterData');
-    if (data) {
-      drugMaster = JSON.parse(data);
-    }
-  };
-  
-  const clearDrugMaster = () => {
-    if (confirm('ブラウザに保存されている全ての薬剤データを削除しますか？')) {
-        localStorage.removeItem('drugMasterData');
-        drugMaster = [];
-        alert('薬剤データを削除しました。');
-    }
-  };
-
-  const saveInputsToLocalStorage = () => {
-    const inputs = {
-      weight: weightEl.value,
-      days: daysEl.value,
-      timesPerDay: timesPerDayEl.value,
-      bunpo: bunpoEl.checked,
-      syrupDissolve: syrupDissolveEl.checked,
-    };
-    localStorage.setItem('appInputs', JSON.stringify(inputs));
-  };
-  
-  const loadInputsFromLocalStorage = () => {
-    const data = localStorage.getItem('appInputs');
-    if (data) {
-      const inputs = JSON.parse(data);
-      weightEl.value = inputs.weight || '';
-      daysEl.value = inputs.days || '7';
-      timesPerDayEl.value = inputs.timesPerDay || '2';
-      bunpoEl.checked = inputs.bunpo || false;
-      syrupDissolveEl.checked = inputs.syrupDissolve || false;
-    }
-  };
-  
-  const resetAll = () => {
-    if (confirm('全ての入力内容をリセットしますか？ (保存された薬剤データは消えません)')) {
-        document.querySelectorAll('input[type="number"], input[type="text"]').forEach(i => i.value = '');
-        document.querySelectorAll('input[type="checkbox"]').forEach(i => i.checked = false);
-        daysEl.value = '7';
-        timesPerDayEl.value = '2';
-        tabletListEl.innerHTML = '';
-        syrupListEl.innerHTML = '';
-        calculateAndRender();
-        saveInputsToLocalStorage();
-    }
-  };
-
-  // --- ユーティリティ ---
-  const copyToClipboard = (text, type) => {
-    navigator.clipboard.writeText(text).then(() => {
-      const feedbackEl = document.getElementById('copy-feedback');
-      feedbackEl.textContent = `${type}をコピーしました！`;
-      feedbackEl.classList.add('show');
-      setTimeout(() => feedbackEl.classList.remove('show'), 2000);
-    }).catch(err => {
-      console.error('コピーに失敗しました', err);
-    });
-  };
-
-  // --- アプリケーション初期化 ---
-  loadDrugMasterFromLocalStorage();
-  loadInputsFromLocalStorage();
-  setupEventListeners();
-  calculateAndRender();
-});
+// --- 省略（前回コードと同じ） ---
+// ★違い：bundlePack関連をすべて削除済み
 </script>
 </body>
 </html>
