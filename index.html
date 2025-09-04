@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<title>薬剤費用計算アプリ v2.6（シンプル：形態一括選択TAB/散剤）</title>
+<title>薬剤費用計算アプリ v2.7（CSV＋メモ＋形態一括／TABは1/4自動最適化＋達成mg/kg表示）</title>
 <style>
 :root{ --gap:14px; --fz:18px; --pad:14px; --btnh:50px; }
 @media (min-width:768px){ :root{ --fz:16px; --pad:10px; --btnh:44px; } }
@@ -35,7 +35,7 @@ kbd{background:#f2f2f7;border:1px solid #d0d0d0;border-radius:6px;padding:2px 6p
 </style>
 </head>
 <body>
-<h1>薬剤費用計算アプリ v2.6（シンプル：形態一括選択TAB/散剤）</h1>
+<h1>薬剤費用計算アプリ v2.7</h1>
 
 <div class="layout">
   <!-- 左：入力 -->
@@ -169,7 +169,7 @@ byId("saveCsv").addEventListener("click",()=>{
 });
 byId("clearCsv").addEventListener("click",()=>{ localStorage.removeItem(STORAGE_KEY_MASTER); alert("CSVマスターを初期化しました"); location.reload(); });
 
-/* ===== 入力行（TAB/散剤共通UI：形態は全体セレクト） ===== */
+/* ===== 入力行（TAB/散剤共通UI） ===== */
 function makeRow(){
   const row=document.createElement("div"); row.className="drug-row";
   row.innerHTML=`
@@ -180,14 +180,6 @@ function makeRow(){
     </div>
     <div class="row">
       <div class="col"><label>薬用量（mg/kg）</label><input type="number" class="dose" step="0.01"/></div>
-      <div class="col" id="splitCol">
-        <label>分割（TABのみ）</label>
-        <select class="split">
-          <option value="1" selected>分割なし</option>
-          <option value="0.5">1/2（+10円/回）</option>
-          <option value="0.25">1/4（+20円/回）</option>
-        </select>
-      </div>
       <div class="col"><button class="removeBtn danger">削除</button></div>
     </div>
     <div class="row">
@@ -199,10 +191,8 @@ function makeRow(){
       </div>
     </div>
   `;
-  // 削除
   row.querySelector(".removeBtn").addEventListener("click",()=>row.remove());
 
-  // CSV選択で自動入力＋メモ復元
   const nameInput=row.querySelector(".drugName");
   const unitInput=row.querySelector(".unitMg");
   const costInput=row.querySelector(".cost");
@@ -220,7 +210,6 @@ function makeRow(){
   nameInput.addEventListener("change",()=>loadFromCsv(nameInput.value));
   nameInput.addEventListener("blur",()=>loadFromCsv(nameInput.value));
 
-  // メモ保存
   saveBtn.addEventListener("click",()=>{
     const name=nameInput.value.trim();
     if(!name){ alert("薬剤名を入力/選択してください"); return; }
@@ -236,19 +225,33 @@ function addRow(){ list.appendChild(makeRow()); }
 byId("addDrug").addEventListener("click",addRow);
 addRow();
 
-/* 形態切替（UIラベルと分割欄の表示制御） */
+/* 形態切替（UIラベル） */
 function applyGlobalFormUI(){
   const mode=byId("globalForm").value;
-  const showSplit=(mode==="TAB");
-  // ラベル切替
-  document.querySelectorAll("#unitLabel").forEach(l=>l.textContent = showSplit ? "含有量（mg/錠）" : "含有量（mg/mL）");
-  document.querySelectorAll("#costLabel").forEach(l=>l.textContent = showSplit ? "単価（円/錠）" : "単価（円/mL）");
-  document.querySelectorAll("#splitCol").forEach(col=> col.classList.toggle("hidden", !showSplit));
-  // 分包機チェックの表示：TABのみ意味がある（粉は常に分包）
-  byId("bunpoWrap").classList.toggle("hidden", !(mode==="TAB"));
+  document.querySelectorAll("#unitLabel").forEach(l=>l.textContent = (mode==="TAB" ? "含有量（mg/錠）" : "含有量（mg/mL）"));
+  document.querySelectorAll("#costLabel").forEach(l=>l.textContent = (mode==="TAB" ? "単価（円/錠）" : "単価（円/mL）"));
+  byId("bunpoWrap").classList.toggle("hidden", !(mode==="TAB")); // 散剤は常に分包
 }
 byId("globalForm").addEventListener("change",applyGlobalFormUI);
 applyGlobalFormUI();
+
+/* ===== TAB用：1/4錠単位で自動最適化 =====
+   totalMg を unit( mg/錠 ) の 1/4 刻みで切上げ。
+   quarters = ceil( totalMg / (unit/4) )
+   whole = floor(quarters/4), rem=quarters%4, halves=floor(rem/2), quarters=rem%2
+   tablets_billed = ceil(quarters/4)  // 製造に必要な錠数（1錠→4/4）
+*/
+function optimizeTablets(totalMg, unitMgPerTab){
+  if(!(unitMgPerTab>0)){ return {whole:0, halves:0, quarters:0, billed:0, achievedMg:0}; }
+  const qNeeded = Math.ceil(totalMg / (unitMgPerTab/4));
+  const whole = Math.floor(qNeeded/4);
+  const rem = qNeeded % 4;
+  const halves = Math.floor(rem/2);
+  const quarters = rem % 2;
+  const billed = Math.ceil(qNeeded/4); // 実際に必要な錠数
+  const achievedMg = (whole + halves*0.5 + quarters*0.25) * unitMgPerTab;
+  return {whole, halves, quarters, billed, achievedMg};
+}
 
 /* ===== 計算 ===== */
 function calcAll(){
@@ -261,47 +264,72 @@ function calcAll(){
 
   let detail="", subtotal=0, items=0;
   let splitFeeTotal=0, packFeeTotal=0;
+  let needsHalf=false, needsQuarter=false; // どれか1剤でも使えばフラグ
 
   list.querySelectorAll(".drug-row").forEach(row=>{
     const name=row.querySelector(".drugName").value.trim();
-    const unit=parseFloat(row.querySelector(".unitMg").value||"0");
+    const unit=parseFloat(row.querySelector(".unitMg").value||"0");   // mg/錠 or mg/mL
     const cost=parseFloat(row.querySelector(".cost").value||"0");
     const dose=parseFloat(row.querySelector(".dose").value||"0");
-    const splitSel=row.querySelector(".split");
-    const split = (mode==="TAB") ? parseFloat((splitSel?.value)||"1") : 1;
 
     if(!name||!unit||!cost||!dose||!weight||!days||!tpd) return;
 
     const mgPerDose=weight*dose;
-    const totalMg=mgPerDose*doses;
+    const totalMg  = mgPerDose*doses;
     const pricePer = ceil10(cost * markupFor(cost));
 
     if(mode==="TAB"){
-      const count=Math.ceil(totalMg/unit);
-      const drugCost=ceilYen(pricePer*count);
-      subtotal+=drugCost; items++;
-      // 分割料
-      if(split===0.5) splitFeeTotal += 10*doses;
-      if(split===0.25) splitFeeTotal += 20*doses;
+      // 1/4刻み最適化
+      const opt = optimizeTablets(totalMg, unit);
+      const billedTabs = opt.billed;
+      const drugCost = ceilYen(pricePer * billedTabs);
+      subtotal += drugCost; items++;
+
+      // 分割フラグ（詳細用＆手数料決定）
+      if(opt.quarters>0){ needsQuarter = true; }
+      else if(opt.halves>0){ needsHalf = true; }
+
+      // 実効 mg/kg（全期間平均）
+      const achievedMgPerKg = (opt.achievedMg / doses) / weight;
+
+      // 詳細出力（達成mg/kgと構成）
+      const parts = [];
+      if(opt.whole)   parts.push(`${opt.whole}t`);
+      if(opt.halves)  parts.push(`${opt.halves}×1/2t`);
+      if(opt.quarters)parts.push(`${opt.quarters}×1/4t`);
+      const comp = parts.length ? parts.join(" + ") : "0t";
 
       detail += `【錠剤】${name} ${unit}mg/錠
-${dose}mg/kg × ${tpd}回 × ${days}日（体重：${weight}kg）
-→ 必要量：${Math.round(totalMg)}mg（${count}錠）
-薬剤料：${drugCost}円（${pricePer}円/錠 × ${count}錠）
+目標：${dose}mg/kg × ${tpd}回 × ${days}日（体重：${weight}kg）
+必要量：${Math.round(totalMg)}mg
+→ 実調整：${comp}（計 ${billedTabs}錠 製造）
+　実効用量：${achievedMgPerKg.toFixed(2)} mg/kg（合計 ${Math.round(opt.achievedMg)}mg）
+薬剤料：${drugCost}円（${pricePer}円/錠 × ${billedTabs}錠）
 
 `;
+
     }else{ // POWDER
-      const ml = Math.ceil((totalMg / unit) * 100)/100; // 0.01mL切上げ（粉でも容量換算列を使用）
+      const ml = Math.ceil((totalMg / unit) * 100)/100; // 0.01mL切上げ（粉でも容量換算の列を使用）
       const drugCost=ceilYen(pricePer*ml);
       subtotal+=drugCost; items++;
+
+      const achievedMgPerKg = (totalMg / doses) / weight; // ほぼ目標通り
+
       detail += `【散剤】${name} ${unit}${isFinite(unit)&&unit>0?"mg/mL":""}
-${dose}mg/kg × ${tpd}回 × ${days}日（体重：${weight}kg）
-→ 必要量：${Math.round(totalMg)}mg（約${ml.toFixed(2)}mL相当）
+目標：${dose}mg/kg × ${tpd}回 × ${days}日（体重：${weight}kg）
+必要量：${Math.round(totalMg)}mg（約${ml.toFixed(2)}mL相当）
+　実効用量：${achievedMgPerKg.toFixed(2)} mg/kg
 薬剤料：${drugCost}円（${pricePer}円/mL × ${ml.toFixed(2)}mL）
 
 `;
     }
   });
+
+  // 分割手数料（全体で一回）：1/4があれば20×doses、なければ1/2があれば10×doses
+  if(mode==="TAB"){
+    if(needsQuarter) splitFeeTotal += 20*doses;
+    else if(needsHalf) splitFeeTotal += 10*doses;
+  }
 
   // 分包料：TABは分包機ONなら全体で一回、散剤は常に全体で一回
   if(mode==="TAB" && bunpo){ packFeeTotal += 20*doses; }
@@ -329,8 +357,8 @@ byId("calcBtn").addEventListener("click",()=>{
   window.__lastTotal = r.total;
   byId("outputSimple").value = buildSimple(r);
   let d = r.detail;
-  if(r.packFeeTotal>0) d += `分包料：${r.packFeeTotal}円\n`;
   if(r.splitFeeTotal>0) d += `分割料合計：${r.splitFeeTotal}円\n`;
+  if(r.packFeeTotal>0)  d += `分包料：${r.packFeeTotal}円\n`;
   d += `処方料：${r.scriptFee}円\n———\n合計：${r.total}円`;
   byId("outputDetail").value = d.trim();
 });
@@ -341,6 +369,7 @@ byId("copySimple").addEventListener("click",()=>copy("outputSimple"));
 byId("copyDetail").addEventListener("click",()=>copy("outputDetail"));
 
 /* 初期化 */
+function applyGlobalFormUI(){ /* already defined above */ }
 refreshDatalist();
 </script>
 </body>
