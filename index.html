@@ -4,9 +4,8 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
 <meta name="color-scheme" content="light">
-<title>薬剤費用計算アプリ v3.0 (リアルタイム版)</title>
+<title>薬剤費用計算アプリ v3.1 (互換性向上版)</title>
 <style>
-/* ↓↓↓ CSSにも同様の設定を追加して、より確実に動作するようにします ↓↓↓ */
 html {
   color-scheme: light;
 }
@@ -69,7 +68,7 @@ input, select, button, textarea {
   border: 1px solid var(--c-border);
   background: #fff;
   transition: all 0.2s ease;
-  color: var(--c-text); /* 文字色を明示的に指定 */
+  color: var(--c-text);
 }
 input:focus, select:focus { outline: none; border-color: var(--c-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-primary) 20%, transparent); }
 input[readonly] { background: var(--c-bg); border-style: dashed; }
@@ -99,7 +98,7 @@ button.danger { background: var(--c-danger); }
 </head>
 <body>
 
-<h1>薬剤費用計算アプリ v3.0</h1>
+<h1>薬剤費用計算アプリ v3.1</h1>
 
 <div class="layout">
   <div class="panel-left" id="input-panel">
@@ -395,7 +394,12 @@ document.addEventListener('DOMContentLoaded', () => {
       
       const mgPerDose = weight * dose;
       const totalMg = mgPerDose * doses;
-      const markupRate = SETTINGS.markups.find(m => cost <= m.upto)?.rate || 1;
+
+      // ↓↓↓ この部分を修正しました ↓↓↓
+      const markupEntry = SETTINGS.markups.find(m => cost <= m.upto);
+      const markupRate = markupEntry ? markupEntry.rate : 1;
+      // ↑↑↑ 修正箇所ここまで ↑↑↑
+
       const pricePer = Math.ceil(cost * markupRate / 10) * 10;
       
       if (mode === 'TAB') {
