@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<title>薬剤費用計算アプリ v3.0（テンプレ&履歴付き）</title>
+<title>薬剤費用計算アプリ v3.1（折りたたみ統合：テンプレ・履歴・CSV）</title>
 <style>
 :root{ --gap:14px; --fz:18px; --pad:12px; --btnh:46px; }
 @media (min-width:768px){ :root{ --fz:16px; --pad:10px; --btnh:42px; } }
@@ -41,13 +41,19 @@ pre.readonly{white-space:pre-wrap;background:#fcfcfd;border:1px solid #eee;borde
 .list .rowline{display:flex;gap:8px;align-items:center}
 .list .rowline .title{flex:1}
 hr.sep{border:0;border-top:1px dashed #ddd;margin:10px 0}
+details.fold{border:1px dashed #d8d8de;border-radius:12px;padding:10px}
+details.fold > summary{cursor:pointer;list-style:none;font-weight:600}
+details.fold > summary::-webkit-details-marker{display:none}
+.section{margin-top:12px;padding-top:6px;border-top:1px solid #f0f0f0}
+.section h3{display:flex;align-items:center;gap:8px;margin:0 0 6px}
+.section .note{font-size:0.9em;color:#666}
 </style>
 </head>
 <body>
-<h1>薬剤費用計算アプリ v3.0</h1>
+<h1>薬剤費用計算アプリ v3.1</h1>
 
 <div class="layout">
-  <!-- 左：入力＆テンプレ -->
+  <!-- 左：入力 & 折りたたみ -->
   <div class="panel-left">
     <div class="card">
       <div class="row">
@@ -72,27 +78,6 @@ hr.sep{border:0;border-top:1px dashed #ddd;margin:10px 0}
     </div>
 
     <div class="card">
-      <h3>🧰 処方テンプレート</h3>
-      <div class="row">
-        <div class="col"><input id="tplName" placeholder="例）下痢止めセット"/></div>
-        <div class="col actions">
-          <button id="saveTpl">現在の入力をテンプレ保存</button>
-          <button id="overwriteTpl" class="ghost">同名に上書き</button>
-        </div>
-      </div>
-      <div class="row">
-        <div class="col"><select id="tplSelect"></select></div>
-        <div class="col actions">
-          <button id="loadTpl" class="secondary">テンプレ読込</button>
-          <button id="deleteTpl" class="danger">テンプレ削除</button>
-          <button id="exportTpl" class="ghost">エクスポート</button>
-          <button id="importTpl" class="ghost">インポート</button>
-        </div>
-      </div>
-      <div class="small">テンプレは端末の <code>localStorage</code> に保存されます。</div>
-    </div>
-
-    <div class="card">
       <h3>💊 薬剤入力</h3>
       <div id="tabletList"></div>
       <div class="actions">
@@ -101,24 +86,67 @@ hr.sep{border:0;border-top:1px dashed #ddd;margin:10px 0}
           <button id="clearAll" class="ghost">入力クリア</button>
         </div>
       </div>
-      <hr class="sep"/>
-      <h3>📦 薬剤データ（CSV） <span class="badge">端末保存</span></h3>
-      <div class="row">
-        <div class="col"><input type="file" id="csvInput" accept=".csv"/></div>
-        <div class="col"><button id="saveCsv" class="secondary">現在のデータをCSV保存</button></div>
-      </div>
-      <div class="small">列：薬剤名, 剤型, 単価（仕入）, 含有量（mg/錠）, （任意）含有量（mg/mL）</div>
+    </div>
+
+    <!-- ★ 折りたたみ統合（テンプレ／履歴／CSV） -->
+    <div class="card">
+      <details class="fold" id="foldTools">
+        <summary>📦 テンプレ・履歴・CSV（クリックで開閉）</summary>
+
+        <div class="section">
+          <h3>🧰 処方テンプレート <span class="badge">端末保存</span></h3>
+          <div class="row">
+            <div class="col"><input id="tplName" placeholder="例）下痢止めセット"/></div>
+            <div class="col actions">
+              <button id="saveTpl">現在の入力をテンプレ保存</button>
+              <button id="overwriteTpl" class="ghost">同名に上書き</button>
+            </div>
+          </div>
+          <div class="row">
+            <div class="col"><select id="tplSelect"></select></div>
+            <div class="col actions">
+              <button id="loadTpl" class="secondary">テンプレ読込</button>
+              <button id="deleteTpl" class="danger">テンプレ削除</button>
+              <button id="exportTpl" class="ghost">エクスポート</button>
+              <button id="importTpl" class="ghost">インポート</button>
+            </div>
+          </div>
+          <div class="note">処方形態・分包ON/OFF・各薬の用量/単価/含有量/メモ・（散剤）溶解/カプセル まで保存します。</div>
+        </div>
+
+        <div class="section">
+          <h3>📚 処方履歴 <span class="badge">端末保存</span></h3>
+          <div class="row">
+            <div class="col"><input id="histFilter" placeholder="検索（タイトル/薬剤名）"/></div>
+            <div class="col actions">
+              <button id="exportHist" class="ghost">履歴エクスポート</button>
+              <button id="clearHist" class="danger">履歴全削除</button>
+              <button id="saveHistory" class="ghost">この処方を履歴保存</button>
+            </div>
+          </div>
+          <div id="historyList" class="list"></div>
+        </div>
+
+        <div class="section">
+          <h3>📦 薬剤データ（CSV） <span class="badge">端末保存</span></h3>
+          <div class="row">
+            <div class="col"><input type="file" id="csvInput" accept=".csv"/></div>
+            <div class="col"><button id="saveCsv" class="secondary">現在のデータをCSV保存</button></div>
+          </div>
+          <div class="small">列：薬剤名, 剤型, 単価（仕入）, 含有量（mg/錠）, （任意）含有量（mg/mL）</div>
+        </div>
+
+      </details>
     </div>
   </div>
 
-  <!-- 右：出力＆履歴 -->
+  <!-- 右：出力 -->
   <div class="panel-right">
     <div class="card">
       <div class="actions">
         <div class="secondary-actions">
           <button id="copySimple" class="secondary">簡易をコピー</button>
           <button id="copyDetail" class="secondary">詳細をコピー</button>
-          <button id="saveHistory" class="ghost">この処方を履歴保存</button>
         </div>
       </div>
     </div>
@@ -129,18 +157,6 @@ hr.sep{border:0;border-top:1px dashed #ddd;margin:10px 0}
     <div class="card">
       <h3>🧮 計算根拠（詳細）</h3>
       <pre id="outputDetail" class="readonly"></pre>
-    </div>
-
-    <div class="card">
-      <h3>📚 処方履歴</h3>
-      <div class="row">
-        <div class="col"><input id="histFilter" placeholder="検索（タイトル/薬剤名）"/></div>
-        <div class="col actions">
-          <button id="exportHist" class="ghost">履歴エクスポート</button>
-          <button id="clearHist" class="danger">履歴全削除</button>
-        </div>
-      </div>
-      <div id="historyList" class="list"></div>
     </div>
   </div>
 </div>
@@ -172,7 +188,7 @@ function refreshDatalist(){
 }
 
 /* CSV入出力 */
-byId("csvInput").addEventListener("change",(ev)=>{
+byId("csvInput")?.addEventListener("change",(ev)=>{
   const f=ev.target.files && ev.target.files[0]; if(!f) return;
   const reader=new FileReader();
   reader.onload=(e)=>{
@@ -181,7 +197,6 @@ byId("csvInput").addEventListener("change",(ev)=>{
     if(lines.length<2){ alert("CSVが空です"); return; }
     const header=lines[0].split(",");
     const idx={ name:header.indexOf("薬剤名"), type:header.indexOf("剤型"), cost:header.indexOf("単価（仕入）"), unitTab:header.indexOf("含有量（mg/錠）"), unitMl:header.indexOf("含有量（mg/mL)") };
-    // NOTE: 一部CSVで (mg/mL) の括弧が全角・半角違いの可能性あり対応:
     if(idx.unitMl<0) idx.unitMl=header.findIndex(h=>h.replace(/\s/g,'').includes("含有量（mg/mL）"));
     const list=[];
     for(let i=1;i<lines.length;i++){
@@ -196,7 +211,7 @@ byId("csvInput").addEventListener("change",(ev)=>{
   };
   reader.readAsText(f,"utf-8");
 });
-byId("saveCsv").addEventListener("click",()=>{
+byId("saveCsv")?.addEventListener("click",()=>{
   const header=["薬剤名","剤型","単価（仕入）","含有量（mg/錠）","含有量（mg/mL）"];
   const rows=[header.join(",")].concat((DRUGS||[]).map(d=>[d.薬剤名,d.剤型,d["単価（仕入）"],d["含有量（mg/錠）"]||"",d["含有量（mg/mL）"]||""].join(",")));
   const blob=new Blob([rows.join("\n")],{type:"text/csv"}); const url=URL.createObjectURL(blob);
@@ -234,7 +249,6 @@ function makeRow(data){
       </div>
     </div>
   `;
-  // フィールド参照
   const nameInput=row.querySelector(".drugName");
   const unitInput=row.querySelector(".unitMg");
   const costInput=row.querySelector(".cost");
@@ -243,7 +257,6 @@ function makeRow(data){
   const syrupChk=row.querySelector(".syrupChk");
   const capsuleChk=row.querySelector(".capsuleChk");
 
-  // 初期データセット
   if(data){
     nameInput.value=data.name||"";
     unitInput.value=(data.unit ?? "");
@@ -275,7 +288,6 @@ function makeRow(data){
     alert("メモを保存しました");
   });
 
-  // 入力の度に再計算
   row.querySelectorAll("input,select,textarea").forEach(el=>{
     el.addEventListener("input",recalc);
     el.addEventListener("change",recalc);
@@ -304,12 +316,12 @@ function applyGlobalFormUI(){
 /* ===== TAB用：1/4錠単位で自動最適化 ===== */
 function optimizeTablets(totalMg, unitMgPerTab){
   if(!(unitMgPerTab>0)){ return {whole:0, halves:0, quarters:0, billed:0, achievedMg:0}; }
-  const qNeeded = Math.ceil(totalMg / (unitMgPerTab/4)); // 1/4錠単位切上げ
+  const qNeeded = Math.ceil(totalMg / (unitMgPerTab/4));
   const whole = Math.floor(qNeeded/4);
   const rem = qNeeded % 4;
   const halves = Math.floor(rem/2);
   const quarters = rem % 2;
-  const billed = Math.ceil(qNeeded/4); // 実際の製造錠数
+  const billed = Math.ceil(qNeeded/4);
   const achievedMg = (whole + halves*0.5 + quarters*0.25) * unitMgPerTab;
   return {whole, halves, quarters, billed, achievedMg};
 }
@@ -320,15 +332,14 @@ function calcAll(){
   const tpd=parseInt(byId("timesPerDay").value||"0");
   const doses=tpd*days;
   const weight=parseFloat(byId("weight").value||"0");
-  const mode=byId("globalForm").value; // TAB or POWDER
+  const mode=byId("globalForm").value;
   const bunpo=byId("bunpo").checked;
 
   let detail="", subtotal=0, items=0;
   let splitFeeTotal=0, packFeeTotal=0, syrupFeeTotal=0, capsuleFeeTotal=0;
   let needsHalf=false, needsQuarter=false;
 
-  const rows=[...list.querySelectorAll(".drug-row")];
-  rows.forEach(row=>{
+  [...list.querySelectorAll(".drug-row")].forEach(row=>{
     const name=row.querySelector(".drugName").value.trim();
     const unit=parseFloat(row.querySelector(".unitMg").value||"0");
     const cost=parseFloat(row.querySelector(".cost").value||"0");
@@ -369,6 +380,7 @@ ${noteArea.value?`メモ：${noteArea.value}\n`:``}
       const ml = Math.ceil((totalMg / unit) * 100)/100;
       const drugCost=ceilYen(pricePer*ml);
       subtotal+=drugCost; items++;
+
       const achievedMgPerKg = (totalMg / doses) / weight;
       if(effSpan) effSpan.textContent = isFinite(achievedMgPerKg)? achievedMgPerKg.toFixed(2) : "-";
 
@@ -397,7 +409,7 @@ ${extraLines}${noteArea.value?`メモ：${noteArea.value}\n`:``}
   return {detail, subtotal, splitFeeTotal, packFeeTotal, syrupFeeTotal, capsuleFeeTotal, scriptFee, total, items, mode, doses, days, tpd};
 }
 
-/* 出力 */
+/* 出力 & コピー */
 function buildSimple({mode, doses, days, tpd, total}){
   const unit = doses>0 ? ceil10(total/doses) : 0;
   const freq = (tpd===1?"SID":tpd===2?"BID":"TID");
@@ -416,19 +428,17 @@ function recalc(){
   d += `処方料：${r.scriptFee}円\n———\n合計：${r.total}円`;
   byId("outputDetail").textContent = d.trim();
 }
-
-/* クリップボード */
 function copyPre(id){
   const text=byId(id).textContent;
   navigator.clipboard?.writeText(text).then(()=>alert("コピーしました")).catch(()=>{
-    const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta);
+    const ta=document.createElement("textarea"); ta.value=text); document.body.appendChild(ta);
     ta.select(); document.execCommand("copy"); ta.remove(); alert("コピーしました");
   });
 }
 byId("copySimple").addEventListener("click",()=>copyPre("outputSimple"));
 byId("copyDetail").addEventListener("click",()=>copyPre("outputDetail"));
 
-/* ===== テンプレート機能 ===== */
+/* ===== テンプレ ===== */
 function loadTemplates(){ return JSON.parse(localStorage.getItem(KEY_TPL)||"[]"); }
 function saveTemplates(arr){ localStorage.setItem(KEY_TPL, JSON.stringify(arr)); }
 function currentFormData(){
@@ -462,7 +472,6 @@ function refreshTplSelect(){
   const sel=byId("tplSelect"); const arr=loadTemplates();
   sel.innerHTML=""; arr.forEach((t,i)=>{ const opt=document.createElement("option"); opt.value=i; opt.textContent=t.name; sel.appendChild(opt); });
 }
-
 byId("saveTpl").addEventListener("click",()=>{
   const data=currentFormData(); if(!data.name){ alert("テンプレート名を入力してください"); return; }
   const arr=loadTemplates();
@@ -510,7 +519,7 @@ function saveHistory(arr){ localStorage.setItem(KEY_HIST, JSON.stringify(arr)); 
 function pushHistory(){
   const title = prompt("履歴タイトル（例：下痢止め 10kg BID7日）",""); 
   const simple=byId("outputSimple").textContent; const detail=byId("outputDetail").textContent;
-  const snapshot=currentFormData(); // 現在の入力構成も丸ごと保存
+  const snapshot=currentFormData();
   const item={ id: Date.now(), ts:new Date().toISOString(), title: title|| (snapshot.items?.map(i=>i.name).slice(0,2).join("＋") || "処方"), simple, detail, snapshot };
   const arr=loadHistory(); arr.unshift(item); while(arr.length>100) arr.pop(); saveHistory(arr); renderHistory(); alert("履歴に保存しました");
 }
@@ -552,10 +561,17 @@ byId("clearHist").addEventListener("click",()=>{
 byId("histFilter").addEventListener("input",renderHistory);
 
 /* クリップボード */
+function copyPre(id){
+  const text=byId(id).textContent;
+  navigator.clipboard?.writeText(text).then(()=>alert("コピーしました")).catch(()=>{
+    const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta);
+    ta.select(); document.execCommand("copy"); ta.remove(); alert("コピーしました");
+  });
+}
 byId("copySimple").addEventListener("click",()=>copyPre("outputSimple"));
 byId("copyDetail").addEventListener("click",()=>copyPre("outputDetail"));
 
-/* ===== 再計算フロー ===== */
+/* ===== 再計算 ===== */
 function buildSimple({mode, doses, days, tpd, total}){
   const unit = doses>0 ? ceil10(total/doses) : 0;
   const freq = (tpd===1?"SID":tpd===2?"BID":"TID");
@@ -575,7 +591,7 @@ function recalc(){
   byId("outputDetail").textContent = d.trim();
 }
 
-/* ===== 計算本体（v2.9と同等） ===== */
+/* ===== 計算（v2.9相当） ===== */
 function calcAll(){
   const days=parseInt(byId("days").value||"0");
   const tpd=parseInt(byId("timesPerDay").value||"0");
@@ -625,8 +641,7 @@ ${noteArea.value?`メモ：${noteArea.value}\n`:``}
       const drugCost=ceilYen(pricePer*ml);
       subtotal+=drugCost; items++;
       const achievedMgPerKg=(totalMg/doses)/weight; if(effSpan) effSpan.textContent=isFinite(achievedMgPerKg)?achievedMgPerKg.toFixed(2):"-";
-      let extraLines="";
-      if(syrupChk?.checked){ syrupFeeTotal+=500; extraLines+=`シロップ溶解：500円\n`; }
+      let extraLines=""; if(syrupChk?.checked){ syrupFeeTotal+=500; extraLines+=`シロップ溶解：500円\n`; }
       if(capsuleChk?.checked){ capsuleFeeTotal+=800; extraLines+=`カプセル詰め：800円\n`; }
       detail += `【散剤】${name} ${unit}${isFinite(unit)&&unit>0?"mg/mL":""}
 目標：${dose}mg/kg × ${tpd}回 × ${days}日（体重：${weight}kg）
@@ -645,7 +660,7 @@ ${extraLines}${noteArea.value?`メモ：${noteArea.value}\n`:``}
   return {detail, subtotal, splitFeeTotal, packFeeTotal, syrupFeeTotal, capsuleFeeTotal, scriptFee, total, items, mode, doses, days, tpd};
 }
 
-/* 初期化：テンプレ/履歴UI */
+/* 初期化 */
 function refreshTplSelect(){ const sel=byId("tplSelect"); const arr=JSON.parse(localStorage.getItem(KEY_TPL)||"[]"); sel.innerHTML=""; arr.forEach((t,i)=>{ const o=document.createElement("option"); o.value=i; o.textContent=t.name; sel.appendChild(o); }); }
 function renderHistory(){ const listEl=byId("historyList"); const filter=byId("histFilter").value.trim().toLowerCase(); const arr=loadHistory(); listEl.innerHTML="";
   arr.filter(it=>{ if(!filter) return true; return (it.title||"").toLowerCase().includes(filter) || (it.snapshot?.items||[]).some(d=>d.name.toLowerCase().includes(filter)); })
@@ -663,9 +678,7 @@ function renderHistory(){ const listEl=byId("historyList"); const filter=byId("h
     listEl.appendChild(line);
   });
 }
-byId("saveHistory").addEventListener("click",pushHistory);
 
-/* 初期セット */
 function init(){
   refreshDatalist();
   addRow();
@@ -673,6 +686,9 @@ function init(){
   recalc();
   refreshTplSelect();
   renderHistory();
+
+  // 折りたたみは初期状態で閉
+  const fold=byId("foldTools"); if(fold && fold.open) fold.open=false;
 }
 init();
 </script>
