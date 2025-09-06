@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<title>薬剤費用計算アプリ v2.8（RT計算・実効mg/kg表示）</title>
+<title>薬剤費用計算アプリ v2.9（RT計算・完全費用ルール・散剤のみ溶解/カプセル）</title>
 <style>
 :root{ --gap:14px; --fz:18px; --pad:12px; --btnh:46px; }
 @media (min-width:768px){ :root{ --fz:16px; --pad:10px; --btnh:42px; } }
@@ -28,18 +28,18 @@ button.ghost{background:#fff;color:#0a84ff;border:1px solid #bcd6ff}
 }
 .drug-row{border:1px dashed #d0d0d0;border-radius:12px;padding:12px;margin:10px 0}
 .label-inline{display:flex;align-items:center;gap:8px}
-.kv{display:flex;align-items:center;gap:8px}
-.kv .pill{padding:4px 8px;border-radius:999px;background:#f4f7ff;border:1px solid #dbe6ff;color:#123}
+.pill{padding:4px 8px;border-radius:999px;background:#f4f7ff;border:1px solid #dbe6ff;color:#123}
 pre.readonly{white-space:pre-wrap;background:#fcfcfd;border:1px solid #eee;border-radius:12px;padding:12px;min-height:140px;font-family:ui-monospace, SFMono-Regular, Menlo, monospace}
 .actions{display:flex;gap:10px;flex-wrap:wrap}
 .primary-actions button{background:#0a84ff}
 .secondary-actions button{background:#f2f2f7;color:#111;border:1px solid #d0d0d0}
 .hidden{display:none}
 .small{font-size:0.85em;color:#666}
+.checkboxline{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
 </style>
 </head>
 <body>
-<h1>薬剤費用計算アプリ v2.8</h1>
+<h1>薬剤費用計算アプリ v2.9</h1>
 
 <div class="layout">
   <!-- 左：入力 -->
@@ -59,10 +59,10 @@ pre.readonly{white-space:pre-wrap;background:#fcfcfd;border:1px solid #eee;borde
             <option value="POWDER">散剤</option>
           </select>
         </div>
-        <div class="col label-inline" id="bunpoWrap">
-          <input type="checkbox" id="bunpo"/><label for="bunpo">分包機使用（+20円/回：全体で1回）</label>
+        <div class="col checkboxline">
+          <label class="label-inline"><input type="checkbox" id="bunpo"/> 分包（全体一括 +20円/回）</label>
+          <span class="muted">＠＝合計÷(回数×日数)を10円切上げ／自動再計算</span>
         </div>
-        <div class="col muted">＠は合計÷(回数×日数)を10円切上げ／自動再計算ON</div>
       </div>
     </div>
 
@@ -166,8 +166,7 @@ byId("csvInput").addEventListener("change",(ev)=>{
       };
       if(rec.薬剤名) list.push(rec);
     }
-    DRUGS=list; saveDrugs(DRUGS); refreshDatalist();
-    recalc();
+    DRUGS=list; saveDrugs(DRUGS); refreshDatalist(); recalc();
     alert(`薬剤データを読み込みました（${list.length}件）`);
   };
   reader.readAsText(f,"utf-8");
@@ -182,14 +181,14 @@ byId("saveCsv").addEventListener("click",()=>{
   const a=document.createElement("a"); a.href=url; a.download="drug_master_export.csv"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 });
 
-/* ===== 入力行（実効mg/kgの表示付き） ===== */
+/* ===== 入力行（TAB/POWDER共通。散剤のみ 溶解/カプセル を表示） ===== */
 function makeRow(){
   const row=document.createElement("div"); row.className="drug-row";
   row.innerHTML=`
     <div class="row">
       <div class="col"><label>薬剤名</label><input type="text" class="drugName" list="drugList" placeholder="選択または入力"/></div>
-      <div class="col"><label id="unitLabel">含有量（mg/錠）</label><input type="number" class="unitMg" step="0.01"/></div>
-      <div class="col"><label id="costLabel">単価（円/錠）</label><input type="number" class="cost" step="0.01"/></div>
+      <div class="col"><label class="unitLabel">含有量（mg/錠）</label><input type="number" class="unitMg" step="0.01"/></div>
+      <div class="col"><label class="costLabel">単価（円/錠）</label><input type="number" class="cost" step="0.01"/></div>
     </div>
     <div class="row">
       <div class="col">
@@ -198,10 +197,16 @@ function makeRow(){
       </div>
       <div class="col"><button class="removeBtn danger">削除</button></div>
     </div>
+    <div class="row powderOnly hidden">
+      <div class="col checkboxline">
+        <label><input type="checkbox" class="syrupChk"/> シロップ溶解（+500円）</label>
+        <label><input type="checkbox" class="capsuleChk"/> カプセル詰め（+800円）</label>
+      </div>
+    </div>
     <div class="row">
       <div class="col">
         <label>メモ（薬剤ごとに保存）</label>
-        <textarea class="noteArea" style="height:100px"></textarea>
+        <textarea class="noteArea" style="height:90px"></textarea>
         <button class="secondary saveNoteBtn" style="margin-top:8px">この薬のメモを保存</button>
         <div class="small">※端末内に保存、薬剤名キーで自動復元</div>
       </div>
@@ -245,24 +250,22 @@ function makeRow(){
 }
 
 const list=byId("tabletList");
-function addRow(){ list.appendChild(makeRow()); recalc(); }
+function addRow(){ list.appendChild(makeRow()); applyGlobalFormUI(); recalc(); }
 byId("addDrug").addEventListener("click",addRow);
 byId("clearAll").addEventListener("click",()=>{ list.innerHTML=""; addRow(); });
 
-/* 形態切替（UIラベル） */
+/* 形態切替：ラベルと散剤専用UIの表示 */
 function applyGlobalFormUI(){
-  const mode=byId("globalForm").value;
-  document.querySelectorAll("#unitLabel").forEach(l=>l.textContent = (mode==="TAB" ? "含有量（mg/錠）" : "含有量（mg/mL）"));
-  document.querySelectorAll("#costLabel").forEach(l=>l.textContent = (mode==="TAB" ? "単価（円/錠）" : "単価（円/mL）"));
-  byId("bunpoWrap").classList.toggle("hidden", !(mode==="TAB")); // 散剤は常に分包
-  recalc();
+  const mode=byId("globalForm").value; // TAB or POWDER
+  document.querySelectorAll(".unitLabel").forEach(l=>l.textContent = (mode==="TAB" ? "含有量（mg/錠）" : "含有量（mg/mL）"));
+  document.querySelectorAll(".costLabel").forEach(l=>l.textContent = (mode==="TAB" ? "単価（円/錠）" : "単価（円/mL）"));
+  document.querySelectorAll(".powderOnly").forEach(e=>e.classList.toggle("hidden", !(mode==="POWDER")));
 }
-byId("globalForm").addEventListener("change",applyGlobalFormUI);
 
-/* 採番イベント（体重/日数/回数/分包）で即時再計算 */
-["weight","days","timesPerDay","bunpo"].forEach(id=>{
-  byId(id).addEventListener("input",recalc);
-  byId(id).addEventListener("change",recalc);
+/* 体重/日数/回数/分包 チェンジで即再計算 */
+["weight","days","timesPerDay","bunpo","globalForm"].forEach(id=>{
+  byId(id).addEventListener("input",()=>{ applyGlobalFormUI(); recalc(); });
+  byId(id).addEventListener("change",()=>{ applyGlobalFormUI(); recalc(); });
 });
 
 /* ===== TAB用：1/4錠単位で自動最適化 ===== */
@@ -273,12 +276,12 @@ function optimizeTablets(totalMg, unitMgPerTab){
   const rem = qNeeded % 4;
   const halves = Math.floor(rem/2);
   const quarters = rem % 2;
-  const billed = Math.ceil(qNeeded/4); // 実際の製造錠数（1錠=4/4）
+  const billed = Math.ceil(qNeeded/4); // 実際の製造錠数
   const achievedMg = (whole + halves*0.5 + quarters*0.25) * unitMgPerTab;
   return {whole, halves, quarters, billed, achievedMg};
 }
 
-/* ===== 計算本体 ===== */
+/* ===== 計算本体（元ルール完全対応） ===== */
 function calcAll(){
   const days=parseInt(byId("days").value||"0");
   const tpd=parseInt(byId("timesPerDay").value||"0");
@@ -288,8 +291,8 @@ function calcAll(){
   const bunpo=byId("bunpo").checked;
 
   let detail="", subtotal=0, items=0;
-  let splitFeeTotal=0, packFeeTotal=0;
-  let needsHalf=false, needsQuarter=false; // TABの分割フラグ
+  let splitFeeTotal=0, packFeeTotal=0, syrupFeeTotal=0, capsuleFeeTotal=0;
+  let needsHalf=false, needsQuarter=false; // TABで1/2 or 1/4を使ったか
 
   const rows=[...list.querySelectorAll(".drug-row")];
   rows.forEach(row=>{
@@ -298,9 +301,10 @@ function calcAll(){
     const cost=parseFloat(row.querySelector(".cost").value||"0");
     const dose=parseFloat(row.querySelector(".dose").value||"0");
     const effSpan=row.querySelector(".effDose");
+    const syrupChk=row.querySelector(".syrupChk");
+    const capsuleChk=row.querySelector(".capsuleChk");
 
-    // effDose 初期化
-    if(effSpan) effSpan.textContent = "-";
+    if(effSpan) effSpan.textContent="-";
 
     if(!name||!unit||!cost||!dose||!weight||!days||!tpd) return;
 
@@ -309,6 +313,7 @@ function calcAll(){
     const pricePer = ceil10(cost * markupFor(cost));
 
     if(mode==="TAB"){
+      // 1/4刻み最適化
       const opt = optimizeTablets(totalMg, unit);
       const billedTabs = opt.billed;
       const drugCost = ceilYen(pricePer * billedTabs);
@@ -318,9 +323,9 @@ function calcAll(){
       if(opt.quarters>0){ needsQuarter = true; }
       else if(opt.halves>0){ needsHalf = true; }
 
-      // 実効 mg/kg（全期間平均）
+      // 実効 mg/kg
       const achievedMgPerKg = (opt.achievedMg / doses) / weight;
-      if(effSpan) effSpan.textContent = isFinite(achievedMgPerKg) ? achievedMgPerKg.toFixed(2) : "-";
+      if(effSpan) effSpan.textContent = isFinite(achievedMgPerKg)? achievedMgPerKg.toFixed(2) : "-";
 
       const parts=[];
       if(opt.whole) parts.push(`${opt.whole}t`);
@@ -337,39 +342,43 @@ function calcAll(){
 
 `;
 
-    }else{ // POWDER
+    }else{ // POWDER（散剤）
       const ml = Math.ceil((totalMg / unit) * 100)/100; // 0.01mL切上げ
       const drugCost=ceilYen(pricePer*ml);
       subtotal+=drugCost; items++;
 
-      const achievedMgPerKg = (totalMg / doses) / weight; // 目標とほぼ同じ
-      if(effSpan) effSpan.textContent = isFinite(achievedMgPerKg) ? achievedMgPerKg.toFixed(2) : "-";
+      const achievedMgPerKg = (totalMg / doses) / weight;
+      if(effSpan) effSpan.textContent = isFinite(achievedMgPerKg)? achievedMgPerKg.toFixed(2) : "-";
+
+      // 散剤のみ：シロップ溶解/カプセル詰め（薬剤ごと）
+      let extraLines="";
+      if(syrupChk?.checked){ syrupFeeTotal += 500; extraLines += `シロップ溶解：500円\n`; }
+      if(capsuleChk?.checked){ capsuleFeeTotal += 800; extraLines += `カプセル詰め：800円\n`; }
 
       detail += `【散剤】${name} ${unit}${isFinite(unit)&&unit>0?"mg/mL":""}
 目標：${dose}mg/kg × ${tpd}回 × ${days}日（体重：${weight}kg）
 必要量：${Math.round(totalMg)}mg（約${ml.toFixed(2)}mL相当）
 　実効用量：${achievedMgPerKg.toFixed(2)} mg/kg
 薬剤料：${drugCost}円（${pricePer}円/mL × ${ml.toFixed(2)}mL）
-
+${extraLines ? extraLines : ""}
 `;
     }
   });
 
-  // 分割手数料（TAB：全体で一回）
+  // 分割料（TAB 全体で一回）
   if(byId("globalForm").value==="TAB"){
-    if(needsQuarter) splitFeeTotal += 20*doses;
-    else if(needsHalf) splitFeeTotal += 10*doses;
+    if(needsQuarter)      splitFeeTotal += 20*(tpd*days);
+    else if(needsHalf)    splitFeeTotal += 10*(tpd*days);
   }
 
-  // 分包料：TABは分包機ONで全体一回、散剤は常に全体一回
-  if(byId("globalForm").value==="TAB" && bunpo){ packFeeTotal += 20*doses; }
-  if(byId("globalForm").value==="POWDER"){ packFeeTotal += 20*doses; }
+  // 分包料（全体一括）
+  if(bunpo){ packFeeTotal += 20*(tpd*days); }
 
-  // 処方料
-  const scriptFee = (items>0) ? ceilYen(80*days + 40*days*(items-1)) : 0;
+  // 処方料：1剤目80円/日 + 2剤目以降40円/日
+  const scriptFee = (items>0) ? ceilYen( 80*days + 40*days*(items-1) ) : 0;
 
-  const total = ceilYen(subtotal + splitFeeTotal + packFeeTotal + scriptFee);
-  return {detail, subtotal, splitFeeTotal, packFeeTotal, scriptFee, total, items, mode:byId("globalForm").value, doses, days, tpd};
+  const total = ceilYen(subtotal + splitFeeTotal + packFeeTotal + syrupFeeTotal + capsuleFeeTotal + scriptFee);
+  return {detail, subtotal, splitFeeTotal, packFeeTotal, syrupFeeTotal, capsuleFeeTotal, scriptFee, total, items, mode:byId("globalForm").value, doses, days, tpd};
 }
 
 /* 簡易出力 */
@@ -381,12 +390,11 @@ function buildSimple({mode, doses, days, tpd, total}){
   return [header, tail].join("\n");
 }
 
-/* クリップボード */
+/* クリップボード（preから） */
 function copyTextFromPre(id){
   const el=byId(id);
   const text=el.textContent;
   navigator.clipboard?.writeText(text).then(()=>alert("コピーしました")).catch(()=>{
-    // フォールバック
     const ta=document.createElement("textarea"); ta.value=text; document.body.appendChild(ta);
     ta.select(); document.execCommand("copy"); ta.remove(); alert("コピーしました");
   });
@@ -396,13 +404,13 @@ byId("copyDetail").addEventListener("click",()=>copyTextFromPre("outputDetail"))
 
 /* 再計算 → 出力更新 */
 function recalc(){
-  const r=calcAll();
-  if(!r){ return; }
-  window.__lastTotal = r.total;
+  const r=calcAll(); if(!r) return;
   byId("outputSimple").textContent = buildSimple(r);
   let d = r.detail;
-  if(r.splitFeeTotal>0) d += `分割料合計：${r.splitFeeTotal}円\n`;
-  if(r.packFeeTotal>0)  d += `分包料：${r.packFeeTotal}円\n`;
+  if(r.splitFeeTotal>0)   d += `分割料合計：${r.splitFeeTotal}円\n`;
+  if(r.packFeeTotal>0)    d += `分包料：${r.packFeeTotal}円\n`;
+  if(r.syrupFeeTotal>0)   d += `シロップ溶解合計：${r.syrupFeeTotal}円\n`;
+  if(r.capsuleFeeTotal>0) d += `カプセル詰め合計：${r.capsuleFeeTotal}円\n`;
   d += `処方料：${r.scriptFee}円\n———\n合計：${r.total}円`;
   byId("outputDetail").textContent = d.trim();
 }
@@ -410,9 +418,9 @@ function recalc(){
 /* 初期化 */
 function init(){
   refreshDatalist();
-  addRow();                 // 最初の1行
-  applyGlobalFormUI();      // UI初期反映
-  recalc();                 // 初回計算
+  addRow();
+  applyGlobalFormUI();
+  recalc();
 }
 init();
 </script>
