@@ -3,8 +3,13 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="color-scheme" content="light">
 <title>薬剤費用計算アプリ v3.0 (リアルタイム版)</title>
 <style>
+/* ↓↓↓ CSSにも同様の設定を追加して、より確実に動作するようにします ↓↓↓ */
+html {
+  color-scheme: light;
+}
 :root {
   --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans JP", sans-serif;
   --fz-base: 16px;
@@ -64,6 +69,7 @@ input, select, button, textarea {
   border: 1px solid var(--c-border);
   background: #fff;
   transition: all 0.2s ease;
+  color: var(--c-text); /* 文字色を明示的に指定 */
 }
 input:focus, select:focus { outline: none; border-color: var(--c-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-primary) 20%, transparent); }
 input[readonly] { background: var(--c-bg); border-style: dashed; }
