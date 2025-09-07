@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>薬剤費用計算アプリ v3.5（サジェスト＋テンプレ対応）</title>
+<title>薬剤費用計算アプリ v3.6（計算修正・サジェスト・テンプレ対応）</title>
 <style>
 *{box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;margin:0;padding:16px;background:#fafafa}
@@ -18,13 +18,11 @@ button.danger{background:#ff3b30}
 button.ghost{background:#fff;color:#0a84ff;border:1px solid #bcd6ff}
 .drug-row{border:1px dashed #d0d0d0;border-radius:10px;padding:10px;margin:10px 0}
 pre.readonly{white-space:pre-wrap;background:#fcfcfd;border:1px solid #eee;border-radius:10px;padding:10px;min-height:100px;font-family:ui-monospace,Menlo,monospace}
-
-/* サジェスト */
 .input-wrap{position:relative}
-.suggest{position:absolute;z-index:9999;background:#fff;border:1px solid #d0d0d0;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.1);overflow:auto;max-height:220px}
+/* サジェスト */
+.suggest{position:absolute;z-index:9999;background:#fff;border:1px solid #d0d0d0;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.1);overflow:auto;max-height:220px;display:none}
 .suggest-item{padding:6px 10px;cursor:pointer}
 .suggest-item:hover,.suggest-item.active{background:#eef5ff}
-
 @media (min-width:1100px){
   .layout{display:grid;grid-template-columns:1.1fr 1fr;gap:16px}
   .panel-left{position:sticky;top:8px;align-self:start;max-height:calc(100vh - 16px);overflow:auto}
@@ -34,7 +32,7 @@ pre.readonly{white-space:pre-wrap;background:#fcfcfd;border:1px solid #eee;borde
 </style>
 </head>
 <body>
-<h1>薬剤費用計算アプリ v3.5</h1>
+<h1>薬剤費用計算アプリ v3.6</h1>
 
 <div class="layout">
   <!-- 左：入力 -->
@@ -133,6 +131,16 @@ function byId(id){return document.getElementById(id)}
 function ceil10(y){return Math.ceil(y/10)*10}
 function ceilYen(y){return Math.ceil(y)}
 function markupFor(p){ if(p<=10) return 3; if(p<=50) return 2; if(p<=100) return 1.8; if(p<=500) return 1.5; return 1.2; }
+/* 全角→半角 + 単位除去して数値化 */
+function toNumber(v){
+  if(v==null) return NaN;
+  var s=String(v).trim()
+    .replace(/[０-９]/g,function(ch){return String.fromCharCode(ch.charCodeAt(0)-0xFEE0);})
+    .replace(/[．，]/g,function(ch){return ch==='．'?'.':','})
+    .replace(/[^0-9\.\-]/g,''); // mg、円 など除去
+  if(s==='') return NaN;
+  return parseFloat(s);
+}
 
 /* ====== ストレージキー ====== */
 var KEY_MASTER="drugMasterSimple";
@@ -141,11 +149,11 @@ var KEY_TPL="rxTemplatesV1";
 /* ====== CSV薬剤マスター ====== */
 var DRUGS=(function(){ try{ return JSON.parse(localStorage.getItem(KEY_MASTER))||[]; }catch(e){ return []; } })();
 function saveDrugs(list){ try{ localStorage.setItem(KEY_MASTER, JSON.stringify(list)); }catch(e){} }
-function updateCsvStatus(){ byId("csvStatus").textContent="薬剤データ："+(DRUGS.length||0)+"件（ブラウザに保存）"; }
+function updateCsvStatus(){ byId("csvStatus").textContent="薬剤データ："+(DRUGS.length||0)+"件（ブラウザ保存）"; }
 
 /* ====== サジェスト（薬剤名） ====== */
 function attachAutocomplete(input, unitEl, costEl){
-  var box=document.createElement("div"); box.className="suggest"; box.style.display="none"; input.parentNode.appendChild(box);
+  var box=document.createElement("div"); box.className="suggest"; input.parentNode.appendChild(box);
   var active=-1;
   function close(){ box.style.display="none"; box.innerHTML=""; active=-1; }
   function open(){ box.style.display="block"; }
@@ -169,7 +177,6 @@ function attachAutocomplete(input, unitEl, costEl){
   }
   function select(val){
     input.value=val;
-    // CSVから含有量・単価を補完
     var rec=null; for(var i=0;i<DRUGS.length;i++){ if(DRUGS[i]["薬剤名"]===val){ rec=DRUGS[i]; break; } }
     if(rec){
       if(byId("globalForm").value==="TAB"){ unitEl.value=rec["含有量（mg/錠）"]||""; costEl.value=rec["単価（仕入）"]||""; }
@@ -178,7 +185,7 @@ function attachAutocomplete(input, unitEl, costEl){
     close(); recalc();
   }
   input.addEventListener("input", function(){ filter(input.value); });
-  input.addEventListener("focus", function(){ if(input.value){ filter(input.value); } });
+  input.addEventListener("focus", function(){ if(input.value) filter(input.value); });
   input.addEventListener("blur", function(){ setTimeout(close,100); });
   input.addEventListener("keydown", function(e){
     var items=box.querySelectorAll(".suggest-item");
@@ -190,7 +197,7 @@ function attachAutocomplete(input, unitEl, costEl){
 }
 
 /* ====== 薬剤行 ====== */
-var listEl;
+var listEl=byId("tabletList");
 function makeRow(data){
   var row=document.createElement("div"); row.className="drug-row";
   row.innerHTML=
@@ -206,15 +213,32 @@ function makeRow(data){
   var nameEl=row.querySelector(".drugName");
   var unitEl=row.querySelector(".unitMg");
   var costEl=row.querySelector(".cost");
+  var doseEl=row.querySelector(".dose");
   attachAutocomplete(nameEl,unitEl,costEl);
 
   row.querySelector(".removeBtn").addEventListener("click",function(){ row.remove(); recalc(); });
   var inputs=row.querySelectorAll("input"); for(var i=0;i<inputs.length;i++){ inputs[i].addEventListener("input", recalc); }
 
-  if(data){ nameEl.value=data.name||""; unitEl.value=data.unit||""; costEl.value=data.cost||""; doseEl=data.dose||""; }
+  if(data){
+    nameEl.value=data.name||"";
+    unitEl.value=(data.unit!=null?data.unit:"");
+    costEl.value=(data.cost!=null?data.cost:"");
+    doseEl.value=(data.dose!=null?data.dose:"");
+  }
   return row;
 }
 function addRow(data){ listEl.appendChild(makeRow(data)); recalc(); }
+
+/* ====== ラベル更新（錠剤/散剤） ====== */
+function updateFormLabels(){
+  var isTab = byId("globalForm").value==="TAB";
+  Array.prototype.forEach.call(document.querySelectorAll(".unitLabel"),function(el){
+    el.textContent = isTab ? "含有量（mg/錠）" : "含有量（mg/mL）";
+  });
+  Array.prototype.forEach.call(document.querySelectorAll(".costLabel"),function(el){
+    el.textContent = isTab ? "単価（円/錠）" : "単価（円/mL）";
+  });
+}
 
 /* ====== テンプレート ====== */
 function loadTemplates(){ try{ return JSON.parse(localStorage.getItem(KEY_TPL))||[]; }catch(e){ return []; } }
@@ -229,9 +253,9 @@ function currentFormData(){
   for(var i=0;i<rows.length;i++){
     items.push({
       name: rows[i].querySelector(".drugName").value.trim(),
-      unit: parseFloat(rows[i].querySelector(".unitMg").value||""),
-      cost: parseFloat(rows[i].querySelector(".cost").value||""),
-      dose: parseFloat(rows[i].querySelector(".dose").value||"")
+      unit: toNumber(rows[i].querySelector(".unitMg").value),
+      cost: toNumber(rows[i].querySelector(".cost").value),
+      dose: toNumber(rows[i].querySelector(".dose").value)
     });
   }
   return {
@@ -240,22 +264,22 @@ function currentFormData(){
     bunpo: byId("bunpo").checked,
     days: parseInt(byId("days").value||"0",10),
     tpd: parseInt(byId("timesPerDay").value||"0",10),
-    weight: parseFloat(byId("weight").value||""),
+    weight: toNumber(byId("weight").value),
     items: items.filter(function(x){return x.name;})
   };
 }
 function applyFormData(data){
   if(!data) return;
   byId("globalForm").value = data.mode || "TAB";
-  byId("bunpo").checked = !!data.bunpo;
-  if(data.days) byId("days").value = data.days;
-  if(data.tpd) byId("timesPerDay").value = data.tpd;
-  if(data.weight) byId("weight").value = data.weight;
+  byId("bunpo").checked   = !!data.bunpo;
+  if(data.days)  byId("days").value = data.days;
+  if(data.tpd)   byId("timesPerDay").value = data.tpd;
+  if(data.weight)byId("weight").value = data.weight;
 
   listEl.innerHTML="";
   var its=data.items||[];
-  if(its.length===0){ addRow(); }
-  else{ for(var i=0;i<its.length;i++){ addRow(its[i]); } }
+  if(its.length===0){ addRow(); } else { for(var i=0;i<its.length;i++){ addRow(its[i]); } }
+  updateFormLabels();
   recalc();
 }
 byId("saveTpl").addEventListener("click", function(){
@@ -266,14 +290,13 @@ byId("saveTpl").addEventListener("click", function(){
 byId("overwriteTpl").addEventListener("click", function(){
   var data=currentFormData(); if(!data.name){ alert("テンプレ名を入力してください"); return; }
   var arr=loadTemplates(); var idx=-1; for(var i=0;i<arr.length;i++){ if(arr[i].name===data.name){ idx=i; break; } }
-  if(idx<0){ alert("同名テンプレが見つかりません。『保存』を使ってください。"); return; }
+  if(idx<0){ alert("同名テンプレが見つかりません"); return; }
   arr[idx]=data; saveTemplates(arr); refreshTplSelect(); alert("上書きしました");
 });
 byId("loadTpl").addEventListener("click", function(){
   var arr=loadTemplates(); var idx=parseInt(byId("tplSelect").value||"-1",10);
   if(!(idx>=0 && arr[idx])){ alert("テンプレートを選択してください"); return; }
-  byId("tplName").value=arr[idx].name;
-  applyFormData(arr[idx]);
+  byId("tplName").value=arr[idx].name; applyFormData(arr[idx]);
 });
 byId("deleteTpl").addEventListener("click", function(){
   var arr=loadTemplates(); var idx=parseInt(byId("tplSelect").value||"-1",10);
@@ -294,7 +317,6 @@ byId("csvInput").addEventListener("change", function(ev){
     function idxOf(col){
       var i=header.indexOf(col);
       if(i>=0) return i;
-      // 全角/半角や空白ゆらぎを吸収
       for(var k=0;k<header.length;k++){ if(header[k].replace(/\s/g,"")==col.replace(/\s/g,"")) return k; }
       return -1;
     }
@@ -311,9 +333,9 @@ byId("csvInput").addEventListener("change", function(ev){
       var rec={
         "薬剤名": c[idx.name]||"",
         "剤型": c[idx.type]||"",
-        "単価（仕入）": parseFloat(c[idx.cost]||"0")||0,
-        "含有量（mg/錠）": (idx.unitTab>=0 && c[idx.unitTab])?parseFloat(c[idx.unitTab]):"",
-        "含有量（mg/mL）": (idx.unitMl>=0 && c[idx.unitMl])?parseFloat(c[idx.unitMl]):""
+        "単価（仕入）": toNumber(c[idx.cost]),
+        "含有量（mg/錠）": (idx.unitTab>=0 && c[idx.unitTab])?toNumber(c[idx.unitTab]):"",
+        "含有量（mg/mL）": (idx.unitMl>=0 && c[idx.unitMl])?toNumber(c[idx.unitMl]):""
       };
       if(rec["薬剤名"]) list.push(rec);
     }
@@ -351,9 +373,9 @@ function optimizeTablets(totalMg, unitMg){
 }
 function calcAll(){
   var days=parseInt(byId("days").value||"0",10);
-  var tpd=parseInt(byId("timesPerDay").value||"0",10);
+  var tpd =parseInt(byId("timesPerDay").value||"0",10);
   var doses=tpd*days;
-  var weight=parseFloat(byId("weight").value||"0");
+  var weight=toNumber(byId("weight").value);
   var mode=byId("globalForm").value;
   var bunpo=byId("bunpo").checked;
 
@@ -362,11 +384,12 @@ function calcAll(){
 
   var rows=listEl.querySelectorAll(".drug-row");
   for(var i=0;i<rows.length;i++){
-    var name=rows[i].querySelector(".drugName").value.trim();
-    var unit=parseFloat(rows[i].querySelector(".unitMg").value||"0");
-    var cost=parseFloat(rows[i].querySelector(".cost").value||"0");
-    var dose=parseFloat(rows[i].querySelector(".dose").value||"0");
-    if(!name||!unit||!cost||!dose||!weight||!days||!tpd) continue;
+    var name = rows[i].querySelector(".drugName").value.trim();
+    var unit = toNumber(rows[i].querySelector(".unitMg").value);
+    var cost = toNumber(rows[i].querySelector(".cost").value);
+    var dose = toNumber(rows[i].querySelector(".dose").value);
+
+    if(!(name && isFinite(unit) && unit>0 && isFinite(cost) && cost>0 && isFinite(dose) && dose>0 && isFinite(weight) && weight>0 && days>0 && tpd>0)) continue;
 
     var mgPerDose=weight*dose;
     var totalMg=mgPerDose*doses;
@@ -404,7 +427,7 @@ function calcAll(){
   var freq=(tpd===1?"SID":tpd===2?"BID":"TID");
   var tail=(mode==="TAB" ? "TAB "+doses+"ヶ "+freq+" "+days+"日分" : "粉 "+doses+"包 "+freq+" "+days+"日分");
   var simple="内服薬＠"+ (doses?ceil10(total/doses):0) +" x"+doses+"\n"
-            + simpleLines.join("  ") + "\n"
+            + (simpleLines.length?simpleLines.join("  ")+"\n":"")
             + tail;
 
   if(packFee>0) detail += "分包料："+packFee+"円\n";
@@ -422,16 +445,20 @@ function recalc(){
 }
 
 /* ====== 初期化 ====== */
-var listEl=byId("tabletList");
 function init(){
   updateCsvStatus();
   addRow();
   refreshTplSelect();
+
+  // グローバル入力変更で常に再計算 & ラベル更新
+  ["weight","days","timesPerDay","globalForm","bunpo"].forEach(function(id){
+    var el=byId(id);
+    el.addEventListener("input", function(){ if(id==="globalForm") updateFormLabels(); recalc(); });
+    el.addEventListener("change", function(){ if(id==="globalForm") updateFormLabels(); recalc(); });
+  });
 }
-function addRow(data){
-  listEl.appendChild(makeRow(data));
-  recalc();
-}
+function addRow(data){ listEl.appendChild(makeRow(data)); recalc(); }
+
 byId("addDrug").addEventListener("click",function(){ addRow(); });
 byId("clearAll").addEventListener("click",function(){ listEl.innerHTML=""; addRow(); });
 
