@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>薬剤費用計算アプリ v3.2（複数薬剤追加対応）</title>
+<title>薬剤費用計算アプリ v3.4（完成版）</title>
 <style>
 *{box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;margin:0;padding:16px;background:#fafafa}
@@ -18,30 +18,19 @@ button.danger{background:#ff3b30}
 button.ghost{background:#fff;color:#0a84ff;border:1px solid #bcd6ff}
 .drug-row{border:1px dashed #d0d0d0;border-radius:10px;padding:10px;margin:10px 0}
 pre.readonly{white-space:pre-wrap;background:#fcfcfd;border:1px solid #eee;border-radius:10px;padding:10px;min-height:100px;font-family:ui-monospace,Menlo,monospace}
-details.fold{border:1px dashed #cfd3d8;border-radius:10px;padding:8px}
-details.fold>summary{cursor:pointer;font-weight:600;user-select:none}
-.hidden{display:none}
+.suggest{position:absolute;z-index:9999;background:#fff;border:1px solid #d0d0d0;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,.1);overflow:auto;max-height:200px}
+.suggest-item{padding:6px 10px;cursor:pointer}
+.suggest-item:hover,.suggest-item.active{background:#eef5ff}
+.input-wrap{position:relative}
 @media (min-width:1100px){
   .layout{display:grid;grid-template-columns:1.1fr 1fr;gap:16px}
   .panel-left{position:sticky;top:8px;align-self:start;max-height:calc(100vh - 16px);overflow:auto}
   .panel-right{max-height:calc(100vh - 16px);overflow:auto}
 }
-/* ▼ 複数選択モーダル */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.25);display:none;z-index:9998}
-.modal{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(720px,92vw);max-height:80vh;display:none;z-index:9999;
-  background:#fff;border:1px solid #e5e5ea;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:14px}
-.modal.open,.modal-overlay.open{display:block}
-.modal .header{display:flex;gap:10px;align-items:center;margin-bottom:10px}
-.modal .header input{flex:1}
-.modal .list{border:1px solid #e5e5ea;border-radius:10px;overflow:auto;max-height:48vh;padding:6px}
-.modal .item{display:flex;align-items:center;gap:10px;padding:6px;border-radius:8px}
-.modal .item:hover{background:#f7f9ff}
-.modal .footer{display:flex;gap:10px;justify-content:flex-end;margin-top:10px}
-.smallmuted{font-size:12px;color:#666}
 </style>
 </head>
 <body>
-<h1>薬剤費用計算アプリ v3.2（複数薬剤追加対応）</h1>
+<h1>薬剤費用計算アプリ v3.4（完成版）</h1>
 
 <div class="layout">
   <!-- 左：入力 -->
@@ -50,11 +39,11 @@ details.fold>summary{cursor:pointer;font-weight:600;user-select:none}
       <div class="row">
         <div class="col">
           <label>体重（kg）</label>
-          <input type="number" id="weight" step="0.01" inputmode="decimal" />
+          <input type="number" id="weight" step="0.01"/>
         </div>
         <div class="col">
           <label>日数</label>
-          <input type="number" id="days" value="7" min="1" inputmode="numeric" />
+          <input type="number" id="days" value="7" min="1"/>
         </div>
         <div class="col">
           <label>回数/日</label>
@@ -84,17 +73,8 @@ details.fold>summary{cursor:pointer;font-weight:600;user-select:none}
       <div id="tabletList"></div>
       <div class="row">
         <div class="col"><button id="addDrug">＋ 薬剤を追加</button></div>
-        <div class="col"><button id="addBlank" class="ghost">空行を1つ追加</button></div>
         <div class="col"><button id="clearAll" class="ghost">入力クリア</button></div>
       </div>
-    </div>
-
-    <!-- 折りたたみ -->
-    <div class="card">
-      <details class="fold" id="foldTools">
-        <summary>📦 テンプレ・履歴・CSV</summary>
-        <div>※ここに処方テンプレ、履歴、CSV機能がまとまっています</div>
-      </details>
     </div>
   </div>
 
@@ -111,43 +91,68 @@ details.fold>summary{cursor:pointer;font-weight:600;user-select:none}
   </div>
 </div>
 
-<!-- ▼ 複数追加モーダル -->
-<div id="multiOverlay" class="modal-overlay"></div>
-<div id="multiModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="multiTitle">
-  <div class="header">
-    <strong id="multiTitle">薬剤をまとめて追加</strong>
-    <input type="text" id="multiSearch" placeholder="頭文字で絞り込み"/>
-    <button id="btnStarts" class="secondary">頭文字一致</button>
-    <button id="btnAny" class="secondary">部分一致</button>
-  </div>
-  <div class="smallmuted">クリックで選択／もう一度クリックで解除。最大200件表示。</div>
-  <div id="multiList" class="list"></div>
-  <div class="footer">
-    <button id="btnSelectAll" class="secondary">すべて選択</button>
-    <button id="btnClearSel" class="secondary">選択解除</button>
-    <div style="flex:1"></div>
-    <button id="btnCancel" class="ghost">キャンセル</button>
-    <button id="btnAddSelected">選択した薬剤を追加</button>
-  </div>
-</div>
-
 <script>
-/* ====== ユーティリティ ====== */
+/* ==== ユーティリティ ==== */
 function byId(id){return document.getElementById(id)}
 function ceil10(y){return Math.ceil(y/10)*10}
 function ceilYen(y){return Math.ceil(y)}
 function markupFor(p){ if(p<=10) return 3; if(p<=50) return 2; if(p<=100) return 1.8; if(p<=500) return 1.5; return 1.2; }
 
-/* ====== CSV薬剤マスター ====== */
-var DRUGS = []; // localStorageから読込可
+/* ==== CSVマスター ==== */
+var DRUGS=[];
 
-/* ====== 薬剤行生成 ====== */
-var listEl = null;
+/* ==== サジェスト機能 ==== */
+function attachAutocomplete(input, unitEl, costEl){
+  var box=document.createElement("div"); box.className="suggest hidden"; input.parentNode.appendChild(box);
+  var active=-1;
+  function close(){ box.classList.add("hidden"); box.innerHTML=""; active=-1; }
+  function open(){ box.classList.remove("hidden"); }
+  function render(list){
+    box.innerHTML="";
+    list.forEach(function(name,i){
+      var div=document.createElement("div"); div.className="suggest-item"; div.textContent=name;
+      div.addEventListener("mousedown", function(e){ e.preventDefault(); select(name); });
+      box.appendChild(div);
+    });
+    if(list.length===0) close(); else open();
+  }
+  function filter(q){
+    q=q.trim().toLowerCase();
+    if(!q){ close(); return; }
+    var names=DRUGS.map(d=>d["薬剤名"]).filter(Boolean);
+    var starts=names.filter(n=>n.toLowerCase().indexOf(q)===0);
+    var contains=names.filter(n=>n.toLowerCase().indexOf(q)>0);
+    var all=starts.concat(contains).filter((v,i,a)=>a.indexOf(v)===i).slice(0,50);
+    render(all);
+  }
+  function select(val){
+    input.value=val;
+    var rec=DRUGS.find(d=>d["薬剤名"]===val);
+    if(rec){
+      if(byId("globalForm").value==="TAB"){ unitEl.value=rec["含有量（mg/錠）"]||""; costEl.value=rec["単価（仕入）"]||""; }
+      else{ unitEl.value=rec["含有量（mg/mL）"]||""; costEl.value=rec["単価（仕入）"]||""; }
+    }
+    close(); recalc();
+  }
+  input.addEventListener("input", function(){ filter(input.value); });
+  input.addEventListener("focus", function(){ if(input.value) filter(input.value); });
+  input.addEventListener("blur", function(){ setTimeout(close,100); });
+  input.addEventListener("keydown", function(e){
+    var items=box.querySelectorAll(".suggest-item");
+    if(e.key==="ArrowDown"){ active=(active+1)%items.length; items.forEach((el,i)=>el.classList.toggle("active",i===active)); e.preventDefault();}
+    else if(e.key==="ArrowUp"){ active=(active-1+items.length)%items.length; items.forEach((el,i)=>el.classList.toggle("active",i===active)); e.preventDefault();}
+    else if(e.key==="Enter"){ if(active>=0&&items[active]){ select(items[active].textContent); e.preventDefault(); }}
+    else if(e.key==="Escape"){ close(); }
+  });
+}
+
+/* ==== 薬剤行 ==== */
+var listEl;
 function makeRow(data){
   var row=document.createElement("div"); row.className="drug-row";
-  row.innerHTML =
+  row.innerHTML=
     '<div class="row">'+
-      '<div class="col"><label>薬剤名</label><input class="drugName" placeholder="選択/入力"/></div>'+
+      '<div class="col"><label>薬剤名</label><div class="input-wrap"><input class="drugName" placeholder="選択/入力"/></div></div>'+
       '<div class="col"><label class="unitLabel">含有量（mg/錠）</label><input type="number" class="unitMg" step="0.01"/></div>'+
       '<div class="col"><label class="costLabel">単価（円/錠）</label><input type="number" class="cost" step="0.01"/></div>'+
     '</div>'+
@@ -155,72 +160,106 @@ function makeRow(data){
       '<div class="col"><label>薬用量（mg/kg）</label><input type="number" class="dose" step="0.01"/></div>'+
       '<div class="col"><button class="removeBtn danger">削除</button></div>'+
     '</div>';
-  if(data){
-    row.querySelector(".drugName").value = data.name||"";
-    row.querySelector(".unitMg").value   = data.unit||"";
-    row.querySelector(".cost").value     = data.cost||"";
-  }
-  row.querySelector(".removeBtn").addEventListener("click", function(){ row.remove(); recalc(); });
-  row.querySelectorAll("input").forEach(function(inp){ inp.addEventListener("input", recalc); });
+  var nameEl=row.querySelector(".drugName");
+  var unitEl=row.querySelector(".unitMg");
+  var costEl=row.querySelector(".cost");
+  attachAutocomplete(nameEl,unitEl,costEl);
+  row.querySelector(".removeBtn").addEventListener("click",()=>{row.remove();recalc();});
+  row.querySelectorAll("input").forEach(inp=>inp.addEventListener("input",recalc));
+  if(data){ nameEl.value=data.name||""; unitEl.value=data.unit||""; costEl.value=data.cost||""; }
   return row;
 }
 function addRow(data){ listEl.appendChild(makeRow(data)); recalc(); }
 
-/* ====== 複数選択モーダル ====== */
-var multi = {overlay:byId("multiOverlay"), modal:byId("multiModal"), search:byId("multiSearch"), list:byId("multiList"), mode:"starts", selected:new Set()};
-function openMulti(){ multi.selected.clear(); multi.search.value=""; multi.mode="starts"; renderMultiList(""); multi.overlay.classList.add("open"); multi.modal.classList.add("open"); setTimeout(function(){ multi.search.focus(); },50);}
-function closeMulti(){ multi.overlay.classList.remove("open"); multi.modal.classList.remove("open"); }
-function filterNames(q){
-  q=(q||"").toLowerCase();
-  var names=DRUGS.map(function(d){return d["薬剤名"];}).filter(Boolean);
-  if(!q) return names.slice(0,200);
-  if(multi.mode==="starts"){
-    var s=names.filter(function(n){return n.toLowerCase().indexOf(q)===0;});
-    var c=names.filter(function(n){return n.toLowerCase().indexOf(q)>0;});
-    return s.concat(c).filter(function(v,i,a){return a.indexOf(v)===i;}).slice(0,200);
-  }else{
-    return names.filter(function(n){return n.toLowerCase().indexOf(q)>=0;}).slice(0,200);
-  }
+/* ==== 費用計算ロジック ==== */
+function optimizeTablets(totalMg, unitMg){
+  if(!(unitMg>0)) return {billed:0, achievedMg:0, split:""};
+  var q=Math.ceil(totalMg/(unitMg/4)); // 1/4錠単位
+  var billed=Math.ceil(q/4);
+  var achieved=billed*unitMg;
+  var split="";
+  if(q%4===2) split="1/2";
+  if(q%4===1||q%4===3) split="1/4"; // 1/4が必要な場合
+  return {billed:billed, achievedMg:achieved, split:split};
 }
-function renderMultiList(q){
-  var names=filterNames(q); multi.list.innerHTML="";
-  names.forEach(function(name){
-    var div=document.createElement("div"); div.className="item";
-    var chk=document.createElement("input"); chk.type="checkbox"; chk.checked=multi.selected.has(name);
-    var label=document.createElement("div"); label.textContent=name; label.style.flex="1";
-    div.appendChild(chk); div.appendChild(label);
-    div.addEventListener("click", function(){ if(multi.selected.has(name)){multi.selected.delete(name);chk.checked=false;} else{multi.selected.add(name);chk.checked=true;} });
-    multi.list.appendChild(div);
-  });
-}
-byId("addDrug").addEventListener("click", openMulti);
-byId("addBlank").addEventListener("click", function(){ addRow(); });
-multi.overlay.addEventListener("click", closeMulti);
-byId("btnCancel").addEventListener("click", closeMulti);
-byId("btnStarts").addEventListener("click", function(){multi.mode="starts";renderMultiList(multi.search.value);});
-byId("btnAny").addEventListener("click", function(){multi.mode="any";renderMultiList(multi.search.value);});
-multi.search.addEventListener("input", function(){renderMultiList(this.value);});
-byId("btnSelectAll").addEventListener("click", function(){ filterNames(multi.search.value).forEach(function(n){multi.selected.add(n);}); renderMultiList(multi.search.value);});
-byId("btnClearSel").addEventListener("click", function(){multi.selected.clear(); renderMultiList(multi.search.value);});
-byId("btnAddSelected").addEventListener("click", function(){
-  if(multi.selected.size===0){ alert("薬剤を選択してください"); return; }
+
+function calcAll(){
+  var days=parseInt(byId("days").value||"0",10);
+  var tpd=parseInt(byId("timesPerDay").value||"0",10);
+  var doses=tpd*days;
+  var weight=parseFloat(byId("weight").value||"0");
   var mode=byId("globalForm").value;
-  Array.from(multi.selected).forEach(function(name){
-    var rec=DRUGS.find(function(d){return d["薬剤名"]===name;});
-    var unit="", cost="";
-    if(rec){ if(mode==="TAB"){unit=rec["含有量（mg/錠）"]||""; cost=rec["単価（仕入）"]||"";} else{unit=rec["含有量（mg/mL）"]||""; cost=rec["単価（仕入）"]||"";} }
-    addRow({name:name, unit:unit, cost:cost});
+  var bunpo=byId("bunpo").checked;
+
+  var subtotal=0, items=0, splitFee=0, packFee=0, scriptFee=0;
+  var detail="", simpleLines=[];
+
+  var rows=listEl.querySelectorAll(".drug-row");
+  rows.forEach((row,idx)=>{
+    var name=row.querySelector(".drugName").value.trim();
+    var unit=parseFloat(row.querySelector(".unitMg").value||"0");
+    var cost=parseFloat(row.querySelector(".cost").value||"0");
+    var dose=parseFloat(row.querySelector(".dose").value||"0");
+    if(!name||!unit||!cost||!dose||!weight||!days||!tpd) return;
+    var mgPerDose=weight*dose;
+    var totalMg=mgPerDose*doses;
+    var pricePer=ceil10(cost*markupFor(cost));
+    if(mode==="TAB"){
+      var opt=optimizeTablets(totalMg,unit);
+      var drugCost=ceilYen(pricePer*opt.billed);
+      subtotal+=drugCost; items++;
+      if(opt.split==="1/2") splitFee+=10*doses;
+      if(opt.split==="1/4") splitFee+=20*doses;
+      detail+=`【錠剤】${name} ${unit}mg/錠
+${dose}mg/kg × ${tpd}回 × ${days}日分（体重:${weight}kg）
+→ 必要量:${Math.round(totalMg)}mg（${opt.billed}錠）
+薬剤料:${drugCost}円（${pricePer}円/錠 × ${opt.billed}錠）
+\n`;
+      simpleLines.push(`${name}${unit}mg ${opt.billed}t`);
+    }else{
+      var ml=Math.ceil((totalMg/unit)*100)/100;
+      var drugCost=ceilYen(pricePer*ml);
+      subtotal+=drugCost; items++;
+      detail+=`【散剤】${name} ${unit}mg/mL
+${dose}mg/kg × ${tpd}回 × ${days}日分（体重:${weight}kg）
+→ 必要量:${Math.round(totalMg)}mg（約${ml}mL）
+薬剤料:${drugCost}円
+\n`;
+      simpleLines.push(`${name} ${ml}mL`);
+    }
   });
-  closeMulti();
-});
 
-/* ====== 計算処理（簡略版） ====== */
-function calcAll(){ return {total:1000,doses:14,days:7,tpd:2,mode:"TAB",detail:"テスト出力"}; }
-function buildSimple(r){return "内服薬＠"+ceil10(r.total/r.doses)+" x"+r.doses;}
-function recalc(){ var r=calcAll(); byId("outputSimple").textContent=buildSimple(r); byId("outputDetail").textContent=r.detail; }
+  if(bunpo) packFee+=20*doses;
+  if(items>0) scriptFee=ceilYen(80*days+40*days*(items-1));
+  var total=ceilYen(subtotal+splitFee+packFee+scriptFee);
 
-/* ====== 初期化 ====== */
-function init(){ listEl=byId("tabletList"); addRow(); recalc(); }
+  var freq=(tpd===1?"SID":tpd===2?"BID":"TID");
+  var tail=(mode==="TAB"?`TAB ${doses}ヶ ${freq} ${days}日分`:`粉 ${doses}包 ${freq} ${days}日分`);
+  var simple=`内服薬＠${ceil10(total/doses)} x${doses}
+${simpleLines.join("  ")}
+${tail}`;
+
+  detail+=`処方料:${scriptFee}円\n`;
+  if(packFee>0) detail+=`分包料:${packFee}円\n`;
+  if(splitFee>0) detail+=`分割料:${splitFee}円\n`;
+  detail+=`———\n合計:${total}円`;
+
+  return {simple:simple, detail:detail};
+}
+
+/* ==== 出力更新 ==== */
+function recalc(){
+  var r=calcAll();
+  byId("outputSimple").textContent=r.simple;
+  byId("outputDetail").textContent=r.detail;
+}
+
+/* ==== 初期化 ==== */
+function init(){ listEl=byId("tabletList"); addRow(); }
+byId("addDrug").addEventListener("click",()=>addRow());
+byId("clearAll").addEventListener("click",()=>{listEl.innerHTML=""; addRow();});
+byId("copySimple").addEventListener("click",()=>{navigator.clipboard.writeText(byId("outputSimple").textContent); alert("コピーしました");});
+byId("copyDetail").addEventListener("click",()=>{navigator.clipboard.writeText(byId("outputDetail").textContent); alert("コピーしました");});
 init();
 </script>
 </body>
