@@ -1,10 +1,9 @@
-<!-- 🔧 index.html 全体：機能追加済 -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>薬剤計算アプリ</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>薬剤自動計算ツール</title>
   <style>
     body { font-family: sans-serif; padding: 2em; }
     label, input, button { display: block; margin: 0.5em 0; }
@@ -12,22 +11,65 @@
     button { padding: 0.5em 1em; font-size: 1em; }
     #doseBreakdown { margin-top: 1em; font-weight: bold; }
     #actualDosePerKg { margin-top: 0.5em; color: #555; }
+    #copyOutput { margin-top: 1em; white-space: pre-wrap; background: #f9f9f9; padding: 1em; border-radius: 6px; border: 1px solid #ccc; }
+    .autocomplete-items { position: absolute; border: 1px solid #d4d4d4; z-index: 99; background: white; max-height: 200px; overflow-y: auto; width: 100%; max-width: 300px; }
+    .autocomplete-items div { padding: 10px; cursor: pointer; }
+    .autocomplete-items div:hover { background-color: #e9e9e9; }
   </style>
 </head>
 <body>
   <h1>薬剤自動計算ツール</h1>
 
-  <label>薬剤名（例：セファクリア）<input id="drugName" /></label>
-  <label>体重（kg）<input type="number" id="weight" /></label>
-  <label>必要量（mg）<input type="number" id="requiredMg" /></label>
-  <label>使用可能な錠剤含有量（mg）※カンマ区切り<input id="tabletOptions" placeholder="600,300,75" /></label>
+  <label>薬剤名（例：セファクリア）<input id="drugName" autocomplete="off"></label>
+  <label>体重（kg）<input type="number" id="weight"></label>
+  <label>必要量（mg）<input type="number" id="requiredMg"></label>
+  <label>使用可能な錠剤含有量（mg）※カンマ区切り<input id="tabletOptions" placeholder="600,300,75"></label>
 
   <button onclick="onCalculate()">計算する</button>
 
   <div id="doseBreakdown"></div>
   <div id="actualDosePerKg"></div>
+  <textarea id="copyOutput" rows="6" readonly></textarea>
 
   <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const drugList = ["セファクリア", "アジスロマイシン", "アスコジン", "アスコ", "アタラックス", "アテノロール"];
+      autocomplete(document.getElementById("drugName"), drugList);
+    });
+
+    function autocomplete(inp, arr) {
+      let currentFocus;
+      inp.addEventListener("input", function(e) {
+        let a, b, i, val = this.value;
+        closeAllLists();
+        if (!val) return false;
+        currentFocus = -1;
+        a = document.createElement("DIV");
+        a.setAttribute("id", this.id + "autocomplete-list");
+        a.setAttribute("class", "autocomplete-items");
+        this.parentNode.appendChild(a);
+        for (i = 0; i < arr.length; i++) {
+          if (arr[i].substr(0, val.length) === val) {
+            b = document.createElement("DIV");
+            b.innerHTML = "<strong>" + arr[i].substr(0, val.length) + "</strong>";
+            b.innerHTML += arr[i].substr(val.length);
+            b.addEventListener("click", function(e) {
+              inp.value = this.innerText;
+              closeAllLists();
+            });
+            a.appendChild(b);
+          }
+        }
+      });
+      function closeAllLists(elmnt) {
+        const x = document.getElementsByClassName("autocomplete-items");
+        for (let i = 0; i < x.length; i++) {
+          if (elmnt !== x[i] && elmnt !== inp) x[i].parentNode.removeChild(x[i]);
+        }
+      }
+      document.addEventListener("click", function (e) { closeAllLists(e.target); });
+    }
+
     function calculateDoseCombination(totalMgRequired, tabletOptionsMg) {
       tabletOptionsMg.sort((a, b) => b - a);
       const result = [];
@@ -41,7 +83,6 @@
         }
       }
 
-      // 1/2錠, 1/4錠で残りを補完
       for (let frac of [0.5, 0.25]) {
         for (let dose of tabletOptionsMg) {
           let partial = dose * frac;
@@ -58,26 +99,31 @@
 
     function displayDoseBreakdown(drugName, bodyWeightKg, totalRequiredMg, availableTabletsMg) {
       const { result, overMg } = calculateDoseCombination(totalRequiredMg, availableTabletsMg);
-
       const breakdownEl = document.getElementById('doseBreakdown');
       const actualDoseEl = document.getElementById('actualDosePerKg');
+      const copyOutputEl = document.getElementById('copyOutput');
 
-      let html = `<div>${drugName}</div>`;
+      let html = `${drugName}\n`;
+      let textOutput = `${drugName}\n`;
       let totalActualMg = 0;
 
       result.forEach(({ dose, count }) => {
         let label = (count === 0.5) ? '1/2錠' : (count === 0.25) ? '1/4錠' : `${count}錠`;
-        html += `<div> - ${dose}mg × ${label}</div>`;
+        html += ` - ${dose}mg × ${label}\n`;
+        textOutput += ` - ${dose}mg × ${label}\n`;
         totalActualMg += dose * count;
       });
 
       const overPct = ((totalActualMg - totalRequiredMg) / totalRequiredMg * 100).toFixed(2);
-      html += `<div> → 合計 ${totalActualMg.toFixed(1)}mg（+${overPct}%）</div>`;
+      html += ` → 合計 ${totalActualMg.toFixed(1)}mg（+${overPct}%）`;
+      textOutput += ` → 合計 ${totalActualMg.toFixed(1)}mg（+${overPct}%）\n`;
 
       const actualPerKg = (totalActualMg / bodyWeightKg).toFixed(2);
       actualDoseEl.innerText = `実際の投与量：${actualPerKg} mg/kg`;
+      textOutput += `実際の投与量：${actualPerKg} mg/kg`;
 
-      breakdownEl.innerHTML = html;
+      breakdownEl.innerText = html;
+      copyOutputEl.value = textOutput;
     }
 
     function onCalculate() {
