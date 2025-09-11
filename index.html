@@ -575,6 +575,35 @@ byId("copyDetail").addEventListener("click",function(){
   navigator.clipboard.writeText(byId("outputDetail").textContent); alert("コピーしました");
 });
 
+/* ====== 初期化 ====== */
+function addRow(data){ 
+  listEl.appendChild(makeRow(data)); 
+  recalc(); 
+}
+
+function init(){
+  updateCsvStatus();
+  addRow();            // 初期1行
+  refreshTplSelect();
+
+  // グローバル入力変更で再計算 & ラベル更新
+  ["weight","days","timesPerDay","globalForm","bunpo"].forEach(function(id){
+    var el=byId(id);
+    el.addEventListener("input", function(){ if(id==="globalForm") updateFormLabels(); recalc(); });
+    el.addEventListener("change", function(){ if(id==="globalForm") updateFormLabels(); recalc(); });
+  });
+
+  byId("addDrug").addEventListener("click",function(){ addRow(); });
+  byId("clearAll").addEventListener("click",function(){ listEl.innerHTML=""; addRow(); });
+
+  byId("copySimple").addEventListener("click",function(){
+    navigator.clipboard.writeText(byId("outputSimple").textContent); alert("コピーしました");
+  });
+  byId("copyDetail").addEventListener("click",function(){
+    navigator.clipboard.writeText(byId("outputDetail").textContent); alert("コピーしました");
+  });
+}
+
 init();
 </script>
 </body>
