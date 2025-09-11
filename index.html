@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>薬剤費用計算アプリ v3.6（計算修正・サジェスト・テンプレ対応）</title>
+<title>薬剤費用計算アプリ v3.7（複数規格最適化）</title>
 <style>
 *{box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;margin:0;padding:16px;background:#fafafa}
@@ -32,7 +32,7 @@ pre.readonly{white-space:pre-wrap;background:#fcfcfd;border:1px solid #eee;borde
 </style>
 </head>
 <body>
-<h1>薬剤費用計算アプリ v3.6</h1>
+<h1>薬剤費用計算アプリ v3.7</h1>
 
 <div class="layout">
   <!-- 左：入力 -->
@@ -137,9 +137,12 @@ function toNumber(v){
   var s=String(v).trim()
     .replace(/[０-９]/g,function(ch){return String.fromCharCode(ch.charCodeAt(0)-0xFEE0);})
     .replace(/[．，]/g,function(ch){return ch==='．'?'.':','})
-    .replace(/[^0-9\.\-]/g,''); // mg、円 など除去
+    .replace(/[^0-9\.\-]/g,'');
   if(s==='') return NaN;
   return parseFloat(s);
+}
+function fmtQuarter(n){ // 1/4刻みの小数表記
+  return (Math.round(n*4)/4).toFixed(2).replace(/\.00$/,'').replace(/\.25$/,' .25').replace(' .25','.25').replace(/\.50$/,' .5').replace(' .5','.5').replace(/\.75$/,' .75').replace(' .75','.75').replace(/^0$/,'0');
 }
 
 /* ====== ストレージキー ====== */
@@ -170,6 +173,8 @@ function attachAutocomplete(input, unitEl, costEl){
     q=(q||"").trim().toLowerCase();
     if(!q){ close(); return; }
     var names=DRUGS.map(function(d){return d["薬剤名"];}).filter(Boolean);
+    // 重複排除
+    names = names.filter(function(v,i,a){ return a.indexOf(v)===i; });
     var starts=names.filter(function(n){return n.toLowerCase().indexOf(q)===0;});
     var contains=names.filter(function(n){return n.toLowerCase().indexOf(q)>0;});
     var all=starts.concat(contains).filter(function(v,i,a){return a.indexOf(v)===i;}).slice(0,80);
@@ -177,10 +182,16 @@ function attachAutocomplete(input, unitEl, costEl){
   }
   function select(val){
     input.value=val;
-    var rec=null; for(var i=0;i<DRUGS.length;i++){ if(DRUGS[i]["薬剤名"]===val){ rec=DRUGS[i]; break; } }
-    if(rec){
-      if(byId("globalForm").value==="TAB"){ unitEl.value=rec["含有量（mg/錠）"]||""; costEl.value=rec["単価（仕入）"]||""; }
-      else{ unitEl.value=rec["含有量（mg/mL）"]||""; costEl.value=rec["単価（仕入）"]||""; }
+    // 代表値として「最大規格」を入れておく（表示用）。計算は複数規格で自動最適化される。
+    var recs=DRUGS.filter(function(d){return d["薬剤名"]===val && d["含有量（mg/錠）"]>0;});
+    if(recs.length>0){
+      recs.sort(function(a,b){ return (b["含有量（mg/錠）"]||0) - (a["含有量（mg/錠）"]||0); });
+      unitEl.value = recs[0]["含有量（mg/錠）"] || "";
+      costEl.value = recs[0]["単価（仕入）"] || "";
+    }else{
+      // 散剤など
+      var one=DRUGS.find(function(d){return d["薬剤名"]===val;});
+      if(one){ unitEl.value = one["含有量（mg/mL)"]||one["含有量（mg/mL）」]||one["含有量（mg/mL）"]||""; costEl.value = one["単価（仕入）"]||"";}
     }
     close(); recalc();
   }
@@ -360,17 +371,63 @@ byId("exportCsv").addEventListener("click", function(){
   var url=URL.createObjectURL(blob); var a=document.createElement("a"); a.href=url; a.download="drug_master_export.csv"; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 });
 
-/* ====== 費用計算ロジック ====== */
-function optimizeTablets(totalMg, unitMg){
-  if(!(unitMg>0)) return {billed:0, achievedMg:0, split:""};
-  var q=Math.ceil(totalMg/(unitMg/4)); // 1/4錠単位
-  var billed=Math.ceil(q/4);
-  var achieved=billed*unitMg;
-  var split="";
+/* ====== 複数規格最適化（錠剤用） ======
+  - 同名薬剤の規格（mg/錠）をすべて取得
+  - 単価→院内価格(倍率)を規格ごとに算出
+  - 大きい規格から必要量を割り当て
+  - 最小規格で 1/4 錠まで分割し残量を埋める
+  - 分割料は最小規格の 1/2=10円/回, 1/4=20円/回 を加算
+*/
+function getTabletStrengths(name){
+  var arr=DRUGS.filter(function(d){return d["薬剤名"]===name && d["含有量（mg/錠）"]>0;})
+               .map(function(d){
+                 var unit=d["含有量（mg/錠）"];
+                 var raw=d["単価（仕入）"]||0;
+                 var pricePer = ceil10(raw*markupFor(raw)); // 価格表ルール
+                 return {unitMg:unit, pricePer:pricePer, rawCost:raw};
+               });
+  // 同じ含有量が複数行あっても重複排除（高い方/最新を優先できるよう rawCost は使わない）:
+  var seen={}; var out=[];
+  for(var i=0;i<arr.length;i++){ if(!seen[arr[i].unitMg]){ seen[arr[i].unitMg]=true; out.push(arr[i]); } }
+  out.sort(function(a,b){return b.unitMg-a.unitMg;});
+  return out;
+}
+
+function optimizeMultiStrength(totalMg, strengths){
+  // strengths: desc by unitMg
+  var plan=[], remain=totalMg;
+  if(strengths.length===0) return {plan:[], achieved:0, splitFeePerDose:0};
+
+  // 大きい規格から丸錠
+  for(var i=0;i<strengths.length-1;i++){
+    var s=strengths[i];
+    var cnt=Math.floor(remain / s.unitMg);
+    if(cnt>0){
+      plan.push({unitMg:s.unitMg, billed:cnt, displayCount:cnt, pricePer:s.pricePer, split:""});
+      remain -= cnt*s.unitMg;
+    }
+  }
+  // 最小規格で 1/4 錠刻み
+  var last=strengths[strengths.length-1];
+  var q = Math.ceil(remain / (last.unitMg/4)); // 1/4 錠単位で必要数
+  var billed = Math.ceil(q/4);                 // 実際に必要な錠剤枚数
+  var displayCount = q/4;                      // 表示上は 0.25単位
+  var split = "";
   if(q%4===2) split="1/2";
   if(q%4===1 || q%4===3) split="1/4";
-  return {billed:billed, achievedMg:achieved, split:split};
+  if(displayCount>0){
+    plan.push({unitMg:last.unitMg, billed:billed, displayCount:displayCount, pricePer:last.pricePer, split:split});
+  }
+  var achieved = plan.reduce(function(sum,x){ return sum + x.billed*x.unitMg; }, 0);
+  var splitFeePerDose = 0;
+  // 分割料は最小規格の split 程度で決める（全回数同一前提）
+  if(split==="1/2") splitFeePerDose = 10;
+  if(split==="1/4") splitFeePerDose = 20;
+
+  return {plan:plan, achieved:achieved, splitFeePerDose:splitFeePerDose};
 }
+
+/* ====== 費用計算ロジック ====== */
 function calcAll(){
   var days=parseInt(byId("days").value||"0",10);
   var tpd =parseInt(byId("timesPerDay").value||"0",10);
@@ -389,27 +446,74 @@ function calcAll(){
     var cost = toNumber(rows[i].querySelector(".cost").value);
     var dose = toNumber(rows[i].querySelector(".dose").value);
 
-    if(!(name && isFinite(unit) && unit>0 && isFinite(cost) && cost>0 && isFinite(dose) && dose>0 && isFinite(weight) && weight>0 && days>0 && tpd>0)) continue;
+    if(!(name && isFinite(dose) && dose>0 && isFinite(weight) && weight>0 && days>0 && tpd>0)) continue;
 
     var mgPerDose=weight*dose;
     var totalMg=mgPerDose*doses;
-    var pricePer=ceil10(cost*markupFor(cost));
 
     if(mode==="TAB"){
-      var opt=optimizeTablets(totalMg,unit);
-      var drugCost=ceilYen(pricePer*opt.billed);
-      subtotal+=drugCost; items++;
-      if(opt.split==="1/2") splitFee += 10*doses;
-      if(opt.split==="1/4") splitFee += 20*doses;
+      var strengths=getTabletStrengths(name); // CSV に同名複数規格があればこちらを使用
+      var usedMulti = strengths.length>0;
 
-      detail += "【錠剤】"+name+" "+unit+"mg/錠\n"
-             +  dose+"mg/kg × "+tpd+"回 × "+days+"日分（体重："+weight+"kg）\n"
-             +  "→ 必要量："+Math.round(totalMg)+"mg（"+opt.billed+"錠）\n"
-             +  "薬剤料："+drugCost+"円（"+pricePer+"円/錠 × "+opt.billed+"錠）\n\n";
-      simpleLines.push(name+unit+"mg "+opt.billed+"t");
+      if(usedMulti){
+        var opt=optimizeMultiStrength(totalMg, strengths);
+        // コスト集計
+        var drugCost = 0;
+        var parts = [];
+        for(var k=0;k<opt.plan.length;k++){
+          var p = opt.plan[k];
+          drugCost += ceilYen(p.pricePer * p.billed);
+          parts.push(p.unitMg+"mg×"+fmtQuarter(p.displayCount)+"t");
+        }
+        subtotal += drugCost; items++;
+
+        // 分割料（最小規格分）
+        if(opt.splitFeePerDose>0) splitFee += opt.splitFeePerDose * doses;
+
+        // 出力
+        detail += "【錠剤】"+name+"\n"
+               +  dose+"mg/kg × "+tpd+"回 × "+days+"日分（体重："+weight+"kg）\n"
+               +  "→ 必要量："+Math.round(totalMg)+"mg\n"
+               +  "→ "+parts.join(" + ")+"\n"
+               +  "薬剤料："+drugCost+"円\n\n";
+
+        // 簡易
+        var simpleParts=[];
+        for(k=0;k<opt.plan.length;k++){
+          var sp=opt.plan[k];
+          simpleParts.push(name+sp.unitMg+"mg "+fmtQuarter(sp.displayCount)+"t");
+        }
+        simpleLines = simpleLines.concat(simpleParts);
+
+      }else{
+        // CSVが無い/単一規格入力 → 旧来の単一最適化で計算
+        if(!(isFinite(unit) && unit>0 && isFinite(cost) && cost>0)) continue;
+        var pricePer=ceil10(cost*markupFor(cost));
+        // 1/4 刻み最適化（単一規格）
+        var q=Math.ceil(totalMg/(unit/4));
+        var billed=Math.ceil(q/4);
+        var split="";
+        if(q%4===2) split="1/2";
+        if(q%4===1 || q%4===3) split="1/4";
+        var displayCount=q/4;
+        var drugCost=ceilYen(pricePer*billed);
+        subtotal+=drugCost; items++;
+        if(split==="1/2") splitFee+=10*doses;
+        if(split==="1/4") splitFee+=20*doses;
+
+        detail += "【錠剤】"+name+" "+unit+"mg/錠\n"
+               +  dose+"mg/kg × "+tpd+"回 × "+days+"日分（体重："+weight+"kg）\n"
+               +  "→ 必要量："+Math.round(totalMg)+"mg（"+fmtQuarter(displayCount)+"錠相当）\n"
+               +  "薬剤料："+drugCost+"円（"+pricePer+"円/錠 × "+billed+"錠）\n\n";
+        simpleLines.push(name+unit+"mg "+fmtQuarter(displayCount)+"t");
+      }
+
     }else{
+      // 散剤：従来通り（複数濃度は稀なので単一扱い）
+      if(!(isFinite(unit) && unit>0 && isFinite(cost) && cost>0)) continue;
+      var pricePerP=ceil10(cost*markupFor(cost));
       var ml=Math.ceil((totalMg/unit)*100)/100;
-      var drugCostP=ceilYen(pricePer*ml);
+      var drugCostP=ceilYen(pricePerP*ml);
       subtotal+=drugCostP; items++;
 
       detail += "【散剤】"+name+" "+unit+"mg/mL\n"
@@ -420,12 +524,14 @@ function calcAll(){
     }
   }
 
-  if(bunpo) packFee += 20*doses;
+  // 分包
+  if(bunpo){ packFee += 20*doses; }
+  // 処方料
   if(items>0) scriptFee = ceilYen(80*days + 40*days*(items-1));
   var total = ceilYen(subtotal + splitFee + packFee + scriptFee);
 
   var freq=(tpd===1?"SID":tpd===2?"BID":"TID");
-  var tail=(mode==="TAB" ? "TAB "+doses+"ヶ "+freq+" "+days+"日分" : "粉 "+doses+"包 "+freq+" "+days+"日分");
+  var tail=(byId("globalForm").value==="TAB" ? "TAB "+doses+"ヶ "+freq+" "+days+"日分" : "粉 "+doses+"包 "+freq+" "+days+"日分");
   var simple="内服薬＠"+ (doses?ceil10(total/doses):0) +" x"+doses+"\n"
             + (simpleLines.length?simpleLines.join("  ")+"\n":"")
             + tail;
@@ -450,7 +556,7 @@ function init(){
   addRow();
   refreshTplSelect();
 
-  // グローバル入力変更で常に再計算 & ラベル更新
+  // グローバル入力変更で再計算 & ラベル更新
   ["weight","days","timesPerDay","globalForm","bunpo"].forEach(function(id){
     var el=byId(id);
     el.addEventListener("input", function(){ if(id==="globalForm") updateFormLabels(); recalc(); });
