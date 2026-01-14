@@ -101,4 +101,186 @@ const toNumber = v => {
     return parseFloat(s) || 0;
 };
 
-const ceil1 =
+const ceil1 = v => Math.ceil(v);
+const ceil10 = v => Math.ceil(v / 10) * 10;
+
+function calcAll() {
+    const weight = toNumber(byId("weight").value);
+    const days = parseInt(byId("days").value) || 0;
+    const tpd = parseInt(byId("timesPerDay").value);
+    const totalDoses = days * tpd;
+    const isPowder = byId("globalForm").value === "POWDER";
+    const useBunpo = byId("bunpo").checked;
+
+    if (weight <= 0 || days <= 0) return;
+
+    let medTotal = 0, drugLines = [], splitFeePerDay = 0, drugCount = 0;
+    let detailHtml = "";
+    let globalAlert = false;
+
+    document.querySelectorAll(".drug-row").forEach(row => {
+        const name = row.querySelector(".drugName").value;
+        const unit = toNumber(row.querySelector(".unitMg").value);
+        const cost = toNumber(row.querySelector(".cost").value);
+        const dose = toNumber(row.querySelector(".dose").value);
+        if (!name || unit <= 0) return;
+
+        drugCount++;
+        const targetMgPerDose = weight * dose;
+        
+        let markup = 1.2;
+        if (cost <= 10) markup = 3;
+        else if (cost <= 50) markup = 2;
+        else if (cost <= 100) markup = 1.8;
+        else if (cost <= 500) markup = 1.5;
+        
+        const pricePerTablet = ceil1(cost * markup);
+        const usagePerDose = targetMgPerDose / unit;
+        const billedQty = Math.ceil(usagePerDose * totalDoses);
+        
+        // 実効薬用量を mg/kg/回 で再計算
+        const actualMgPerDose = (billedQty * unit) / totalDoses;
+        const actualMgPerKg = actualMgPerDose / weight;
+        const deviation = dose > 0 ? (actualMgPerKg - dose) / dose : 0;
+        
+        const isAlert = Math.abs(deviation) >= 0.1;
+        if(isAlert) globalAlert = true;
+
+        medTotal += (pricePerTablet * billedQty);
+        drugLines.push(`${name} ${billedQty}t`);
+
+        const frac = usagePerDose % 1;
+        if (frac > 0) splitFeePerDay = Math.max(splitFeePerDay, frac === 0.5 ? 10 : 20);
+
+        const alertClass = isAlert ? 'class="alert-text"' : '';
+        const devPercent = (deviation * 100).toFixed(1);
+
+        detailHtml += `<strong>【${name}】</strong>\n`;
+        detailHtml += `  指示用量: ${dose.toFixed(2)} mg/kg/回\n`;
+        detailHtml += `  実効用量: <span ${alertClass}>${actualMgPerKg.toFixed(2)} mg/kg/回</span> `;
+        detailHtml += `<span ${alertClass}>(${devPercent > 0 ? '+' : ''}${devPercent}%)</span>\n`;
+        detailHtml += `  費用: ${pricePerTablet}円 × ${billedQty}t = ${pricePerTablet * billedQty}円\n\n`;
+    });
+
+    if (drugCount === 0) return;
+
+    const scriptFee = (80 + (drugCount - 1) * 40) * days;
+    const packFee = useBunpo ? (20 * totalDoses) : 0;
+    const chouzaiTotal = packFee + (splitFeePerDay * days);
+
+    const grandTotalRaw = medTotal + scriptFee + chouzaiTotal;
+    const unitPrice = ceil10(grandTotalRaw / totalDoses);
+    const finalTotal = unitPrice * totalDoses;
+
+    byId("simpleCard").className = globalAlert ? "card alert-box" : "card";
+    const tpdText = byId("timesPerDay").options[byId("timesPerDay").selectedIndex].text;
+    byId("outputSimple").textContent = `・内服薬＠${unitPrice}x${totalDoses}\n${drugLines.join(" ")}\n${isPowder ? "粉" : "錠剤"}　${totalDoses}分包　${tpdText}　${days}日分`;
+
+    detailHtml += `------------------------------\n`;
+    detailHtml += `処方料：${scriptFee}円 / 薬剤料：${medTotal}円 / 調剤料：${chouzaiTotal}円\n`;
+    detailHtml += `単価丸め(＠)：${unitPrice}円 (x${totalDoses}回)\n`;
+    detailHtml += `<strong>合計：${finalTotal.toLocaleString()}円</strong>`;
+    byId("outputDetail").innerHTML = detailHtml;
+}
+
+/* --- キーボード操作対応のサジェスト機能 --- */
+function handleKeyDown(e, el) {
+    const container = el.parentElement.querySelector(".suggest-container");
+    const items = container.querySelectorAll(".suggest-item");
+    
+    if (container.style.display !== "block") return;
+
+    if (e.key === "ArrowDown") {
+        e.preventDefault();
+        selectedSuggestIndex = Math.min(selectedSuggestIndex + 1, items.length - 1);
+        updateSelection(items);
+    } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        selectedSuggestIndex = Math.max(selectedSuggestIndex - 1, -1);
+        updateSelection(items);
+    } else if (e.key === "Enter" && selectedSuggestIndex > -1) {
+        e.preventDefault();
+        applySelection(items[selectedSuggestIndex], el);
+    }
+}
+
+function updateSelection(items) {
+    items.forEach((item, idx) => {
+        item.classList.toggle("selected", idx === selectedSuggestIndex);
+        if (idx === selectedSuggestIndex) item.scrollIntoView({ block: "nearest" });
+    });
+}
+
+function applySelection(item, inputEl) {
+    inputEl.value = item.textContent;
+    const row = inputEl.closest(".drug-row");
+    row.querySelector(".unitMg").value = item.dataset.unit;
+    row.querySelector(".cost").value = item.dataset.cost;
+    inputEl.parentElement.querySelector(".suggest-container").style.display = "none";
+    selectedSuggestIndex = -1;
+    calcAll();
+}
+
+function showSuggest(el) {
+    const q = el.value.trim().toLowerCase();
+    const container = el.parentElement.querySelector(".suggest-container");
+    if (!q || DRUG_MASTER.length === 0) { container.style.display = "none"; return; }
+    
+    const matches = DRUG_MASTER.filter(d => d.name.toLowerCase().includes(q)).slice(0, 15);
+    if (matches.length === 0) { container.style.display = "none"; return; }
+
+    container.innerHTML = matches.map(m => `<div class="suggest-item" data-unit="${m.unit}" data-cost="${m.cost}">${m.name}</div>`).join("");
+    container.style.display = "block";
+    selectedSuggestIndex = -1;
+
+    container.querySelectorAll(".suggest-item").forEach(item => {
+        item.onmousedown = () => applySelection(item, el);
+    });
+}
+
+/* --- 初期化・イベント管理 --- */
+function addDrugRow() {
+    const div = document.createElement("div");
+    div.className = "drug-row";
+    div.innerHTML = `<div class="row"><div class="col" style="flex:2"><label>薬剤名</label><input class="drugName" autocomplete="off"><div class="suggest-container"></div></div><div class="col"><label>mg/錠</label><input type="number" step="0.01" class="unitMg"></div><div class="col"><label>原価</label><input type="number" step="0.01" class="cost"></div><div class="col"><label>mg/kg</label><input type="number" step="0.01" class="dose"></div><div class="col" style="flex:0; min-width:44px"><label>&nbsp;</label><button class="danger" onclick="this.closest('.drug-row').remove();calcAll();">×</button></div></div>`;
+    byId("tabletList").appendChild(div);
+    const input = div.querySelector(".drugName");
+    input.addEventListener("input", () => showSuggest(input));
+    input.addEventListener("keydown", (e) => handleKeyDown(e, input));
+    input.addEventListener("blur", () => setTimeout(() => div.querySelector(".suggest-container").style.display="none", 200));
+    div.querySelectorAll("input").forEach(i => i.addEventListener("input", calcAll));
+}
+
+function processCSV(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const lines = e.target.result.split(/\r?\n/).filter(l => l.trim() !== "");
+        const header = lines[0].split(",");
+        const iN = header.findIndex(h => h.includes("薬剤名")), iC = header.findIndex(h => h.includes("単価")), iU = header.findIndex(h => h.includes("含有量"));
+        DRUG_MASTER = lines.slice(1).map(line => {
+            const c = line.split(",");
+            return { name: c[iN]?.trim(), cost: toNumber(c[iC]), unit: toNumber(c[iU]) };
+        }).filter(d => d.name && d.unit > 0);
+        localStorage.setItem("drugMasterV6_4", JSON.stringify(DRUG_MASTER));
+        byId("csvStatus").textContent = DRUG_MASTER.length + "件 読込済";
+        alert("データを更新しました。");
+    };
+    reader.readAsText(file, "UTF-8");
+}
+
+window.onload = () => {
+    addDrugRow();
+    if(DRUG_MASTER.length > 0) byId("csvStatus").textContent = DRUG_MASTER.length + "件 読込済";
+    const dz = byId("dropZone");
+    dz.onclick = () => byId("csvInput").click();
+    dz.ondragover = e => { e.preventDefault(); dz.style.background = "#e1efff"; };
+    dz.ondragleave = () => dz.style.background = "#f0f7ff";
+    dz.ondrop = e => { e.preventDefault(); dz.style.background = "#f0f7ff"; processCSV(e.dataTransfer.files[0]); };
+    byId("csvInput").onchange = e => processCSV(e.target.files[0]);
+    byId("addDrug").onclick = addDrugRow;
+    ["weight", "days", "timesPerDay", "globalForm", "bunpo"].forEach(id => byId(id).onchange = calcAll);
+    byId("copySimple").onclick = () => { navigator.clipboard.writeText(byId("outputSimple").textContent); alert("コピーしました"); };
+};
+</script>
+</body>
+</html>
