@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>薬剤費用計算アプリ v5.5</title>
+    <title>薬剤費用計算 v5.6</title>
     <style>
         :root { --primary: #0a84ff; --bg: #f5f5f7; --card: #ffffff; --border: #d2d2d7; }
         * { box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); margin: 0; padding: 16px; color: #1d1d1f; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); margin: 0; padding: 16px; color: #1d1d1f; line-height: 1.5; }
         h1 { font-size: 20px; margin-bottom: 16px; color: var(--primary); text-align: center; }
+        
         .layout { display: grid; grid-template-columns: 1fr; gap: 16px; max-width: 1200px; margin: 0 auto; }
         @media (min-width: 900px) { .layout { grid-template-columns: 1fr 1fr; } }
         
@@ -16,36 +17,50 @@
         .section-title { font-weight: bold; margin-bottom: 12px; font-size: 14px; color: #86868b; border-bottom: 1px solid #eee; padding-bottom: 4px; }
         
         .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-        .col { flex: 1; min-width: 80px; }
-        label { display: block; font-size: 12px; margin-bottom: 4px; font-weight: 600; }
+        .col { flex: 1; min-width: 80px; position: relative; } /* position:relative 重要 */
+        label { display: block; font-size: 11px; margin-bottom: 4px; font-weight: 600; color: #666; }
         input, select, button { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border); font-size: 15px; outline: none; }
-        input:focus { border-color: var(--primary); }
+        input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(10,132,255,0.1); }
         
-        /* ボタン類 */
-        button { background: var(--primary); color: white; border: none; cursor: pointer; font-weight: bold; transition: opacity 0.2s; }
+        button { background: var(--primary); color: white; border: none; cursor: pointer; font-weight: bold; }
         button:hover { opacity: 0.8; }
         button.secondary { background: #e5e5ea; color: #1d1d1f; border: 1px solid #d2d2d7; }
         button.danger { background: #ff3b30; }
 
         /* ドロップゾーン */
-        .drop-zone { border: 2px dashed var(--primary); border-radius: 12px; padding: 20px; text-align: center; background: #f0f7ff; cursor: pointer; transition: 0.2s; margin-top: 10px; }
-        .drop-zone:hover, .drop-zone.dragover { background: #e1efff; border-style: solid; }
-        .drop-zone p { margin: 0; font-size: 13px; color: var(--primary); pointer-events: none; }
+        .drop-zone { border: 2px dashed var(--primary); border-radius: 12px; padding: 20px; text-align: center; background: #f0f7ff; cursor: pointer; margin-top: 10px; }
+        .drop-zone.dragover { background: #e1efff; border-style: solid; }
+
+        /* サジェスト（検索候補）- 最前面に来るよう修正 */
+        .suggest-container { 
+            position: absolute; 
+            top: 100%; 
+            left: 0; 
+            z-index: 9999; 
+            background: white; 
+            border: 1px solid var(--border); 
+            width: 100%; 
+            max-height: 200px; 
+            overflow-y: auto; 
+            border-radius: 8px; 
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15); 
+            display: none; 
+        }
+        .suggest-item { padding: 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; font-size: 14px; line-height: 1.3; }
+        .suggest-item:hover { background: #f0f7ff; color: var(--primary); }
+        .suggest-item span { display: block; font-size: 11px; color: #86868b; }
 
         /* 薬剤行 */
-        .drug-row { background: #f9f9fb; border: 1px solid #e5e5ea; border-radius: 10px; padding: 12px; margin-bottom: 10px; position: relative; }
-        .suggest { position: absolute; z-index: 100; background: white; border: 1px solid var(--border); width: 100%; max-height: 150px; overflow-y: auto; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); display: none; }
-        .suggest-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 13px; }
-        .suggest-item:hover { background: #f0f7ff; }
+        .drug-row { background: #f9f9fb; border: 1px solid #e5e5ea; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
 
-        /* 出力エリア */
-        pre.readonly { white-space: pre-wrap; background: #1d1d1f; color: #f5f5f7; padding: 16px; border-radius: 10px; font-size: 13px; font-family: "SFMono-Regular", Consolas, monospace; min-height: 100px; }
-        .status-badge { display: inline-block; padding: 2px 8px; background: #34c759; color: white; border-radius: 4px; font-size: 11px; margin-top: 8px; }
+        /* 結果表示 */
+        pre.readonly { white-space: pre-wrap; background: #1c1c1e; color: #34c759; padding: 16px; border-radius: 10px; font-size: 13px; font-family: monospace; min-height: 100px; border: 1px solid #333; }
+        .status-badge { display: inline-block; padding: 4px 12px; background: #86868b; color: white; border-radius: 20px; font-size: 12px; margin-top: 8px; }
     </style>
 </head>
 <body>
 
-<h1>🏥 薬剤費用計算 v5.5 (1/4錠対応)</h1>
+<h1>🏥 薬剤費用計算 v5.6</h1>
 
 <div class="layout">
     <div class="panel">
@@ -72,84 +87,67 @@
                     </select>
                 </div>
                 <div class="col" style="padding-top:20px">
-                    <label style="display:inline"><input type="checkbox" id="bunpo" checked style="width:auto"> 分包機使用</label>
+                    <label><input type="checkbox" id="bunpo" checked style="width:auto"> 分包機使用</label>
                 </div>
             </div>
         </div>
 
         <div class="card" style="margin-top:16px">
-            <div class="section-title">薬剤入力</div>
+            <div class="section-title">薬剤入力（名前を入れると候補が出ます）</div>
             <div id="tabletList"></div>
-            <button id="addDrug" class="secondary">＋ 薬剤を追加</button>
+            <button id="addDrug" class="secondary" style="margin-top:10px">＋ 薬剤を追加</button>
         </div>
 
         <div class="card" style="margin-top:16px">
-            <div class="section-title">薬剤データ(CSV)の読み込み</div>
+            <div class="section-title">薬剤マスタ登録 (CSV形式)</div>
             <div id="dropZone" class="drop-zone">
-                <p>📄 ここにCSVファイルをドロップ<br>またはクリックして選択</p>
+                <p style="color:var(--primary); font-weight:bold; margin:0">📄 CSVをドロップ または クリック</p>
                 <input type="file" id="csvInput" accept=".csv" style="display:none">
             </div>
-            <div id="csvStatus" class="status-badge" style="background:#86868b">薬剤データ: 未読み込み</div>
+            <div id="csvStatus" class="status-badge">未読み込み</div>
         </div>
     </div>
 
     <div class="panel">
         <div class="card">
-            <div class="section-title">計算結果 (簡易版 / カルテ用)</div>
-            <pre id="outputSimple" class="readonly">情報を入力してください</pre>
+            <div class="section-title">カルテ貼付用（簡易版）</div>
+            <pre id="outputSimple">情報を入力してください</pre>
             <button id="copySimple" style="margin-top:8px">📋 簡易版をコピー</button>
         </div>
 
         <div class="card" style="margin-top:16px">
-            <div class="section-title">明細 (詳細版)</div>
-            <pre id="outputDetail" class="readonly">計算待機中...</pre>
+            <div class="section-title">会計明細（詳細版）</div>
+            <pre id="outputDetail" style="color:#d1d1d6">計算待機中...</pre>
             <button id="copyDetail" class="secondary" style="margin-top:8px">📊 明細をコピー</button>
         </div>
     </div>
 </div>
 
 <script>
-/* --- 定数・ストレージ --- */
+/* --- 定数・ロジック --- */
 const byId = id => document.getElementById(id);
-let DRUG_MASTER = JSON.parse(localStorage.getItem("drugMasterV5_5") || "[]");
+let DRUG_MASTER = JSON.parse(localStorage.getItem("drugMasterV5_6") || "[]");
 
-/* --- ユーティリティ --- */
 const toNumber = v => {
     if(!v) return 0;
     const s = String(v).replace(/[０-９]/g, m => String.fromCharCode(m.charCodeAt(0) - 65248)).replace(/[^0-9.]/g, '');
     return parseFloat(s) || 0;
 };
-const ceil10 = v => Math.ceil(v / 10) * 10;
-const markupFor = p => p <= 10 ? 3 : p <= 50 ? 2 : p <= 100 ? 1.8 : p <= 500 ? 1.5 : 1.2;
 
-/* --- 1/4錠計算ロジック --- */
+// 1/4錠 単位の計算
 function optimizeTablets(targetMgPerDose, unitMg, totalDoses) {
-    if (unitMg <= 0) return { billed: 0, usageText: "0錠", fraction: 0, totalActualMg: 0 };
-    
-    // 1/4(0.25)錠単位で切り上げ
+    if (unitMg <= 0) return { billed: 0, usageText: "0錠", totalActualMg: 0 };
     const qCount = Math.ceil(targetMgPerDose / (unitMg / 4));
     const usagePerDose = qCount / 4;
     const billed = Math.ceil(usagePerDose * totalDoses);
-    
     const whole = Math.floor(usagePerDose);
     const frac = usagePerDose - whole;
-    let fracText = "";
-    if (frac === 0.25) fracText = "1/4";
-    else if (frac === 0.5) fracText = "1/2";
-    else if (frac === 0.75) fracText = "3/4";
-
+    let fracText = frac === 0.25 ? "1/4" : frac === 0.5 ? "1/2" : frac === 0.75 ? "3/4" : "";
     const usageText = (whole > 0 ? whole : "") + (fracText ? (whole > 0 ? "と" : "") + fracText : "") + (usagePerDose === 0 ? "0" : "") + "錠";
-    
-    return {
-        billed,
-        usagePerDose,
-        usageText,
-        fraction: frac,
-        totalActualMg: usagePerDose * unitMg * totalDoses
-    };
+    return { billed, usagePerDose, usageText, fraction: frac, totalActualMg: usagePerDose * unitMg * totalDoses };
 }
 
-/* --- メイン計算 --- */
+/* --- 計算実行 --- */
 function calcAll() {
     const weight = toNumber(byId("weight").value);
     const days = parseInt(byId("days").value) || 0;
@@ -158,10 +156,7 @@ function calcAll() {
     const isPowder = byId("globalForm").value === "POWDER";
     const useBunpo = byId("bunpo").checked;
 
-    if (weight <= 0 || days <= 0 || totalDoses <= 0) {
-        byId("outputSimple").textContent = "体重・日数・回数を入力してください";
-        return;
-    }
+    if (weight <= 0 || days <= 0) return;
 
     let subtotal = 0, splitFee = 0, packFee = 0, scriptFee = 500;
     let detail = "", simpleLines = [];
@@ -171,29 +166,26 @@ function calcAll() {
         const unit = toNumber(row.querySelector(".unitMg").value);
         const cost = toNumber(row.querySelector(".cost").value);
         const dose = toNumber(row.querySelector(".dose").value);
-
-        if (!name || unit <= 0 || dose <= 0) return;
+        if (!name || unit <= 0) return;
 
         const mgPerDose = weight * dose;
-        const pricePer = ceil10(cost * markupFor(cost));
+        const markup = cost <= 10 ? 3 : cost <= 50 ? 2 : cost <= 100 ? 1.8 : cost <= 500 ? 1.5 : 1.2;
+        const pricePer = Math.ceil((cost * markup) / 10) * 10;
         
         if (!isPowder) {
             const opt = optimizeTablets(mgPerDose, unit, totalDoses);
             const drugCost = Math.ceil(pricePer * opt.billed);
             subtotal += drugCost;
-            
-            // 分割手数料計算
             if (opt.fraction === 0.5) splitFee += 10 * totalDoses;
             else if (opt.fraction > 0) splitFee += 20 * totalDoses;
-
-            detail += `【錠剤】${name} (${unit}mg)\n  1回量: ${opt.usageText} (計${opt.billed}錠分)\n  薬剤料: ${drugCost}円 (単価:${pricePer}円)\n  ★実量: ${(opt.totalActualMg / totalDoses / weight).toFixed(2)}mg/kg\n\n`;
+            detail += `【錠剤】${name}\n  1回量: ${opt.usageText} (計${opt.billed}錠) / ${drugCost}円\n  ★実量: ${(opt.totalActualMg/totalDoses/weight).toFixed(2)}mg/kg\n\n`;
             simpleLines.push(`${name} ${opt.usageText} ×${totalDoses}回`);
         } else {
-            const totalMgNeeded = mgPerDose * totalDoses;
-            const billed = Math.ceil(totalMgNeeded / unit);
+            const totalMg = mgPerDose * totalDoses;
+            const billed = Math.ceil(totalMg / unit);
             const drugCost = Math.ceil(pricePer * billed);
             subtotal += drugCost;
-            detail += `【粉砕】${name} (${unit}mg)\n  総量: ${totalMgNeeded.toFixed(1)}mg (${billed}錠粉砕)\n  薬剤料: ${drugCost}円\n  ★実量: ${(billed * unit / totalDoses / weight).toFixed(2)}mg/kg\n\n`;
+            detail += `【粉砕】${name}\n  総量: ${totalMg.toFixed(1)}mg (${billed}錠粉砕) / ${drugCost}円\n  ★実量: ${(billed*unit/totalDoses/weight).toFixed(2)}mg/kg\n\n`;
             simpleLines.push(`${name}(粉砕) ${billed}t分`);
         }
     });
@@ -202,69 +194,76 @@ function calcAll() {
     const total = subtotal + splitFee + packFee + scriptFee;
 
     byId("outputSimple").textContent = simpleLines.join("、") + `\n${days}日分 ${tpd===1?'SID':tpd===2?'BID':'TID'} 分包\n合計：${total.toLocaleString()}円`;
-    byId("outputDetail").textContent = detail + `------------------------------\n薬剤料：${subtotal}円\n分割料：${splitFee}円\n分包料：${packFee}円\n処方料：${scriptFee}円\n==============================\n合計：${total.toLocaleString()}円（税込）`;
+    byId("outputDetail").textContent = detail + `------------------------------\n薬剤料：${subtotal}円\n分割料：${splitFee}円\n分包料：${packFee}円\n処方料：${scriptFee}円\n合計：${total.toLocaleString()}円（税込）`;
 }
 
-/* --- CSV読み込み処理 --- */
+/* --- サジェスト機能 --- */
+function showSuggest(el) {
+    const q = el.value.trim().toLowerCase();
+    const container = el.parentElement.querySelector(".suggest-container");
+    
+    if (!q || DRUG_MASTER.length === 0) {
+        container.style.display = "none";
+        return;
+    }
+
+    const matches = DRUG_MASTER.filter(d => d.name.toLowerCase().includes(q)).slice(0, 20);
+    
+    if (matches.length === 0) {
+        container.style.display = "none";
+        return;
+    }
+
+    container.innerHTML = matches.map(m => `
+        <div class="suggest-item" data-unit="${m.unit}" data-cost="${m.cost}">
+            ${m.name}
+            <span>含有量: ${m.unit}mg / 単価: ${m.cost}円</span>
+        </div>
+    `).join("");
+    
+    container.style.display = "block";
+
+    // 候補クリック時
+    container.querySelectorAll(".suggest-item").forEach(item => {
+        item.onmousedown = (e) => { // clickより先に発生するmousedownで確実にキャッチ
+            el.value = item.childNodes[0].textContent.trim();
+            const row = el.closest(".drug-row");
+            row.querySelector(".unitMg").value = item.dataset.unit;
+            row.querySelector(".cost").value = item.dataset.cost;
+            container.style.display = "none";
+            calcAll();
+        };
+    });
+}
+
+/* --- CSV処理 --- */
 function processCSV(file) {
-    if (!file) return;
     const reader = new FileReader();
     reader.onload = (e) => {
-        try {
-            const content = e.target.result;
-            const lines = content.split(/\r?\n/).filter(l => l.trim() !== "");
-            if (lines.length < 2) return alert("CSVファイルが空か、形式が正しくありません。");
+        const lines = e.target.result.split(/\r?\n/).filter(l => l.trim() !== "");
+        const header = lines[0].split(",");
+        const iN = header.findIndex(h => h.includes("薬剤名"));
+        const iC = header.findIndex(h => h.includes("単価"));
+        const iU = header.findIndex(h => h.includes("含有量"));
 
-            // ヘッダー解析
-            const header = lines[0].split(",");
-            const idxName = header.findIndex(h => h.includes("薬剤名"));
-            const idxCost = header.findIndex(h => h.includes("単価"));
-            const idxUnit = header.findIndex(h => h.includes("含有量"));
+        DRUG_MASTER = lines.slice(1).map(line => {
+            const c = line.split(",");
+            return { name: c[iN]?.trim(), cost: toNumber(c[iC]), unit: toNumber(c[iU]) };
+        }).filter(d => d.name && d.unit > 0);
 
-            const newData = lines.slice(1).map(line => {
-                const cols = line.split(",");
-                return {
-                    name: cols[idxName]?.trim(),
-                    cost: toNumber(cols[idxCost]),
-                    unit: toNumber(cols[idxUnit])
-                };
-            }).filter(d => d.name && d.unit > 0);
-
-            if (newData.length > 0) {
-                DRUG_MASTER = newData;
-                localStorage.setItem("drugMasterV5_5", JSON.stringify(DRUG_MASTER));
-                byId("csvStatus").textContent = `薬剤データ: ${DRUG_MASTER.length}件（読込済）`;
-                byId("csvStatus").style.background = "#34c759";
-                alert(`${DRUG_MASTER.length}件の薬剤データを読み込みました。`);
-            }
-        } catch (err) {
-            console.error(err);
-            alert("CSVの読み込み中にエラーが発生しました。");
-        }
+        localStorage.setItem("drugMasterV5_6", JSON.stringify(DRUG_MASTER));
+        updateStatus();
+        alert(DRUG_MASTER.length + "件の薬剤データを読み込みました。");
     };
     reader.readAsText(file, "UTF-8");
 }
 
-/* --- サジェスト表示 --- */
-function showSuggest(el) {
-    const q = el.value.toLowerCase();
-    const box = el.nextElementSibling;
-    if (!q) { box.style.display="none"; return; }
-    const matches = DRUG_MASTER.filter(d => d.name.toLowerCase().includes(q)).slice(0, 15);
-    if (matches.length === 0) { box.style.display="none"; return; }
-    
-    box.innerHTML = matches.map(m => `<div class="suggest-item" data-unit="${m.unit}" data-cost="${m.cost}">${m.name}</div>`).join("");
-    box.style.display = "block";
-    box.querySelectorAll(".suggest-item").forEach(item => {
-        item.onclick = () => {
-            el.value = item.textContent;
-            const row = el.closest(".drug-row");
-            row.querySelector(".unitMg").value = item.dataset.unit;
-            row.querySelector(".cost").value = item.dataset.cost;
-            box.style.display = "none";
-            calcAll();
-        };
-    });
+function updateStatus() {
+    const st = byId("csvStatus");
+    if(DRUG_MASTER.length > 0) {
+        st.textContent = "薬剤データ: " + DRUG_MASTER.length + "件 読込済";
+        st.style.background = "#34c759";
+    }
 }
 
 /* --- 行追加 --- */
@@ -273,39 +272,36 @@ function addDrugRow() {
     div.className = "drug-row";
     div.innerHTML = `
         <div class="row">
-            <div class="col" style="position:relative"><label>薬剤名</label><input class="drugName" placeholder="名称入力..."><div class="suggest"></div></div>
-            <div class="col" style="flex:0.5"><label>含有量(mg)</label><input type="number" step="0.01" class="unitMg"></div>
-            <div class="col" style="flex:0.5"><label>単価(仕入)</label><input type="number" step="0.01" class="cost"></div>
-            <div class="col" style="flex:0.5"><label>用量(mg/kg)</label><input type="number" step="0.01" class="dose"></div>
-            <div class="col" style="flex:0; min-width:40px"><label>&nbsp;</label><button class="danger" onclick="this.closest('.drug-row').remove();calcAll();">×</button></div>
+            <div class="col" style="flex:2">
+                <label>薬剤名 (入力で検索)</label>
+                <input class="drugName" placeholder="例: セファ...">
+                <div class="suggest-container"></div>
+            </div>
+            <div class="col"><label>含有量(mg)</label><input type="number" step="0.01" class="unitMg"></div>
+            <div class="col"><label>単価(仕入)</label><input type="number" step="0.01" class="cost"></div>
+            <div class="col"><label>用量(mg/kg)</label><input type="number" step="0.01" class="dose"></div>
+            <div class="col" style="flex:0; min-width:44px"><label>&nbsp;</label><button class="danger" onclick="this.closest('.drug-row').remove();calcAll();">×</button></div>
         </div>`;
     byId("tabletList").appendChild(div);
-    div.querySelector(".drugName").oninput = (e) => showSuggest(e.target);
-    div.querySelectorAll("input").forEach(i => i.oninput = calcAll);
+    
+    const input = div.querySelector(".drugName");
+    input.addEventListener("input", () => showSuggest(input));
+    input.addEventListener("blur", () => setTimeout(() => div.querySelector(".suggest-container").style.display="none", 200));
+    div.querySelectorAll("input").forEach(i => i.addEventListener("input", calcAll));
 }
 
-/* --- イベント設定 --- */
+/* --- 初期起動 --- */
 window.onload = () => {
     addDrugRow();
-    if (DRUG_MASTER.length > 0) {
-        byId("csvStatus").textContent = `薬剤データ: ${DRUG_MASTER.length}件（読込済）`;
-        byId("csvStatus").style.background = "#34c759";
-    }
+    updateStatus();
 
-    // ドラッグ＆ドロップ設定
     const dz = byId("dropZone");
-    const ci = byId("csvInput");
-    dz.onclick = () => ci.click();
-    dz.ondragover = (e) => { e.preventDefault(); dz.classList.add("dragover"); };
+    dz.onclick = () => byId("csvInput").click();
+    dz.ondragover = e => { e.preventDefault(); dz.classList.add("dragover"); };
     dz.ondragleave = () => dz.classList.remove("dragover");
-    dz.ondrop = (e) => {
-        e.preventDefault();
-        dz.classList.remove("dragover");
-        processCSV(e.dataTransfer.files[0]);
-    };
-    ci.onchange = (e) => processCSV(e.target.files[0]);
+    dz.ondrop = e => { e.preventDefault(); dz.classList.remove("dragover"); processCSV(e.dataTransfer.files[0]); };
+    byId("csvInput").onchange = e => processCSV(e.target.files[0]);
 
-    // その他
     byId("addDrug").onclick = addDrugRow;
     ["weight", "days", "timesPerDay", "globalForm", "bunpo"].forEach(id => byId(id).onchange = calcAll);
     byId("copySimple").onclick = () => { navigator.clipboard.writeText(byId("outputSimple").textContent); alert("コピーしました"); };
