@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>薬剤費用計算 v6.5</title>
+    <title>薬剤費用計算 v6.6</title>
     <style>
         :root { --primary: #0a84ff; --bg: #f5f5f7; --card: #ffffff; --border: #d2d2d7; --danger: #ff3b30; --select: #e1efff; }
         * { box-sizing: border-box; }
@@ -32,7 +32,7 @@
 </head>
 <body>
 
-<h1>🏥 薬剤費用計算 v6.5</h1>
+<h1>🏥 薬剤費用計算 v6.6</h1>
 
 <div class="layout">
     <div class="panel">
@@ -54,8 +54,8 @@
                 <div class="col">
                     <label>処方形態</label>
                     <select id="globalForm">
+                        <option value="POWDER">粉 (散剤)</option>
                         <option value="TAB" selected>錠剤 (TAB)</option>
-                        <option value="POWDER">散剤 (粉)</option>
                     </select>
                 </div>
                 <div class="col" style="padding-top:20px">
@@ -109,12 +109,13 @@ function formatTablets(t) {
     const whole = Math.floor(t);
     const frac = t - whole;
     let fracText = "";
+    // 浮動小数点の誤差対策
     if (Math.abs(frac - 0.25) < 0.01) fracText = "1/4";
     else if (Math.abs(frac - 0.5) < 0.01) fracText = "1/2";
     else if (Math.abs(frac - 0.75) < 0.01) fracText = "3/4";
     
     if (whole === 0 && fracText) return fracText;
-    if (whole > 0 && fracText) return `${whole} ${fracText}`; // 1 1/2 のようにスペース
+    if (whole > 0 && fracText) return `${whole} ${fracText}`;
     return whole > 0 ? whole : "0";
 }
 
@@ -141,51 +142,81 @@ function calcAll() {
 
         drugCount++;
         const targetMgPerDose = weight * dose;
-        
-        // 1. 1回あたりの必要錠数（1/4錠単位で切り上げ）
-        const rawTabletsPerDose = targetMgPerDose / unit;
-        // 0.25単位でCeil: (x * 4) -> ceil -> / 4
-        const usagePerDose = Math.ceil(rawTabletsPerDose * 4) / 4;
-        
-        // 2. 総錠数計算
-        const billedQty = Math.ceil(usagePerDose * totalDoses);
-        
-        // 3. 費用計算
+        let finalTabletsTotal = 0;
+        let usageText = "";
+
+        // -----------------------------------------------------
+        // モード別計算ロジック
+        // -----------------------------------------------------
+        if (!isPowder) {
+            // ■ 錠剤モード (TAB)
+            // 1回量を1/4単位で丸める → それを日数分
+            const rawTabletsPerDose = targetMgPerDose / unit;
+            const usagePerDose = Math.ceil(rawTabletsPerDose * 4) / 4;
+            finalTabletsTotal = usagePerDose * totalDoses;
+            usageText = `${formatTablets(usagePerDose)}t / 回`;
+
+            // 分割手数料判定（1回量に対して）
+            const frac = usagePerDose % 1;
+            if (frac > 0) splitFeePerDay = Math.max(splitFeePerDay, frac === 0.5 ? 10 : 20);
+
+        } else {
+            // ■ 散剤モード (POWDER)
+            // 全日数分の総量を計算 → 総量を1/4単位で丸める
+            const totalMgNeeded = targetMgPerDose * totalDoses;
+            const rawTotalTablets = totalMgNeeded / unit;
+            // 総量を0.25刻みで切り上げ（誤差最小化）
+            finalTabletsTotal = Math.ceil(rawTotalTablets * 4) / 4;
+            usageText = `${finalTabletsTotal}t分`;
+            
+            // 散剤の場合は「総量」での分割手数料判定は一般にしないが、
+            // 請求上1/4単位を使うなら手数料を取るか？
+            // ここでは「散剤」は分包料がメインのため、分割料は加算しない（あるいはルールに従う）
+            // ※「錠剤を分割する場合」のルールに従い、散剤でも分割して作るなら加算するなら以下
+            // 一旦、散剤モードでは分割料ロジックは自動適用せず、分包料のみとするのが一般的ですが
+            // 必要であれば有効化してください。
+        }
+
+        // -----------------------------------------------------
+        // 費用計算（共通）
+        // -----------------------------------------------------
+        // 請求上の錠数：開封した錠剤として「切り上げ」
+        const billedQty = Math.ceil(finalTabletsTotal);
+
         let markup = 1.2;
         if (cost <= 10) markup = 3;
         else if (cost <= 50) markup = 2;
         else if (cost <= 100) markup = 1.8;
         else if (cost <= 500) markup = 1.5;
+        
         const pricePerTablet = ceil1(cost * markup);
         const drugCost = pricePerTablet * billedQty;
         medTotal += drugCost;
 
-        // 4. 出力用テキスト作成
-        if (isPowder) {
-            // 散剤モード: 総錠数を表示
-            drugLines.push(`${name} ${billedQty}t`);
-        } else {
-            // 錠剤モード: 1回量を表示 (例: バイトリル 1/2t / 回)
-            drugLines.push(`${name} ${formatTablets(usagePerDose)}t / 回`);
-        }
+        drugLines.push(`${name} ${usageText}`);
 
-        // 5. アラート判定 (実効mg/kg/回)
-        const actualMgPerDose = (billedQty * unit) / totalDoses; // 散剤も錠剤も総量から逆算した平均
+        // -----------------------------------------------------
+        // アラート & 詳細表示
+        // -----------------------------------------------------
+        // 実効用量(mg/kg/回)
+        const actualMgTotal = finalTabletsTotal * unit;
+        const actualMgPerDose = actualMgTotal / totalDoses;
         const actualMgPerKg = actualMgPerDose / weight;
+        
         const deviation = dose > 0 ? (actualMgPerKg - dose) / dose : 0;
         const isAlert = Math.abs(deviation) >= 0.1;
         if(isAlert) globalAlert = true;
 
-        // 6. 分割手数料判定
-        const frac = usagePerDose % 1;
-        if (frac > 0) splitFeePerDay = Math.max(splitFeePerDay, frac === 0.5 ? 10 : 20);
-
-        // 詳細HTML
         const alertClass = isAlert ? 'class="alert-text"' : '';
         const devPercent = (deviation * 100).toFixed(1);
+
         detailHtml += `<strong>【${name}】</strong>\n`;
         detailHtml += `  指示: ${dose.toFixed(2)} mg/kg (${targetMgPerDose.toFixed(2)}mg/回)\n`;
-        detailHtml += `  計算: 1回 ${formatTablets(usagePerDose)}t (計${billedQty}t)\n`;
+        if (isPowder) {
+            detailHtml += `  総量計算: 必要${(targetMgPerDose*totalDoses).toFixed(1)}mg → ${finalTabletsTotal}t分 (請求${billedQty}t)\n`;
+        } else {
+            detailHtml += `  単回計算: 1回${formatTablets(finalTabletsTotal/totalDoses)}t × ${totalDoses}回 = 計${finalTabletsTotal}t (請求${billedQty}t)\n`;
+        }
         detailHtml += `  実効: <span ${alertClass}>${actualMgPerKg.toFixed(2)} mg/kg</span> `;
         detailHtml += `<span ${alertClass}>(${devPercent > 0 ? '+' : ''}${devPercent}%)</span>\n`;
         detailHtml += `  費用: ${pricePerTablet}円 × ${billedQty}t = ${drugCost}円\n\n`;
@@ -202,16 +233,14 @@ function calcAll() {
     const unitPrice = ceil10(grandTotalRaw / totalDoses);
     const finalTotal = unitPrice * totalDoses;
 
-    // 出力組み立て
+    // 出力
     byId("simpleCard").className = globalAlert ? "card alert-box" : "card";
     const tpdText = byId("timesPerDay").options[byId("timesPerDay").selectedIndex].text;
     
-    // 3行目の作成
     let footerLine = "";
     if (isPowder) {
         footerLine = `粉　${totalDoses}分包　${tpdText}　${days}日分`;
     } else {
-        // 錠剤モード: TAB 14ヶ ...
         footerLine = `TAB ${totalDoses}ヶ ${tpdText} ${days}日分`;
     }
 
@@ -227,7 +256,7 @@ function calcAll() {
     byId("outputDetail").innerHTML = detailHtml;
 }
 
-/* サジェスト・CSV (変更なし) */
+/* UI・サジェスト・CSV (共通) */
 function handleKeyDown(e, el) {
     const container = el.parentElement.querySelector(".suggest-container");
     const items = container.querySelectorAll(".suggest-item");
