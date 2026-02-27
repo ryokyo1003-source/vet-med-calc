@@ -886,16 +886,16 @@
 
             totalCost += dispensingFee;
 
-            // ========== 合計表示: 日額を10円単位で切り上げ → 単価×日数 形式 ==========
-            var perDay = Math.ceil(totalCost / days / 10) * 10;
-            var totalFinal = perDay * days;
-            var totalDisplay = perDay + 'x' + days + '（' + totalFinal.toLocaleString() + '円）';
+            // ========== 合計表示: 1回単価を10円単位で切り上げ → 単価×総回数 形式 ==========
+            var perDose = Math.ceil(totalCost / totalDoses / 10) * 10;
+            var totalFinal = perDose * totalDoses;
+            var totalDisplay = perDose + 'x' + totalDoses + '（' + totalFinal.toLocaleString() + '円）';
 
             // ========== 処方箋テキスト生成 ==========
             var rxText = '';
             if (currentMode === 'powder') {
-                // 散剤: ・内服薬@単価x総回数
-                rxText += '\u30FB\u5185\u670D\u85AC@' + perDay + 'x' + days + '\n';
+                // 散剤: ・内服薬@1回単価x総回数
+                rxText += '\u30FB\u5185\u670D\u85AC@' + perDose + 'x' + totalDoses + '\n';
                 // 薬剤一覧を1行にまとめる
                 var drugLine = validDrugs.map(function(d) {
                     return d.name + ' ' + d.tabletsUsed + 't';
@@ -903,8 +903,8 @@
                 rxText += drugLine + '\n';
                 rxText += totalDoses + '\u5206\u5305\u3000\u7C89 ' + freqText + ' ' + days + '\u65E5\u5206';
             } else {
-                // 錠剤: ・内服薬@単価x総回数
-                rxText += '\u30FB\u5185\u670D\u85AC@' + perDay + 'x' + days + '\n';
+                // 錠剤: ・内服薬@1回単価x総回数
+                rxText += '\u30FB\u5185\u670D\u85AC@' + perDose + 'x' + totalDoses + '\n';
                 // 各薬剤を表示
                 validDrugs.forEach(function(d) {
                     var amtText;
@@ -943,7 +943,7 @@
             // 履歴
             CALCULATION_HISTORY.unshift({
                 timestamp: new Date(), mode: currentMode, days: days,
-                frequency: frequency, totalCost: perDay * days,
+                frequency: frequency, totalCost: perDose * totalDoses,
                 drugCount: validDrugs.length, weight: weight
             });
             if (CALCULATION_HISTORY.length > 20) CALCULATION_HISTORY.pop();
