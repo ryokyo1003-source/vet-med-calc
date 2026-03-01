@@ -227,7 +227,7 @@
                     <div class="checkbox-group">
                         <div class="checkbox-item">
                             <input type="checkbox" id="useBunpo" checked>
-                            <label for="useBunpo">分包機（+20円/回）</label>
+                            <label for="useBunpo">分包機（+30円/回）</label>
                         </div>
                         <div class="checkbox-item">
                             <input type="checkbox" id="useSyrup">
@@ -289,8 +289,8 @@
                         </ul>
                         <h3 style="font-size: 13px; margin-top: 16px;">薬剤料（原価×倍率）</h3>
                         <ul style="font-size: 12px; line-height: 1.8;">
-                            <li>1錠10円まで: ×3倍</li>
-                            <li>1錠50円まで: ×2倍</li>
+                            <li>1錠10円まで: ×4倍</li>
+                            <li>1錠50円まで: ×3倍</li>
                             <li>1錠100円まで: ×1.8倍</li>
                             <li>1錠500円まで: ×1.5倍</li>
                             <li>1錠501円以上: ×1.2倍</li>
@@ -298,7 +298,7 @@
                         </ul>
                         <h3 style="font-size: 13px; margin-top: 16px;">調剤料</h3>
                         <ul style="font-size: 12px; line-height: 1.8;">
-                            <li>分包機: 20円/回</li>
+                            <li>分包機: 30円/回</li>
                             <li>1/2分割: +10円/回</li>
                             <li>1/4分割: +20円/回</li>
                             <li>シロップ: +500円</li>
@@ -760,8 +760,8 @@
         // 計算ロジック
         // =========================================
         function getDrugMultiplier(cost) {
-            if (cost <= 10) return 3;
-            if (cost <= 50) return 2;
+            if (cost <= 10) return 4;
+            if (cost <= 50) return 3;
             if (cost <= 100) return 1.8;
             if (cost <= 500) return 1.5;
             return 1.2;
@@ -856,9 +856,9 @@
             var dispensingFee = 0;
 
             if (useBunpo) {
-                var bf = 20 * totalDoses;
+                var bf = 30 * totalDoses;
                 dispensingFee += bf;
-                results.push({ item: '分包料', detail: '20円 × ' + totalDoses + '回', amount: bf });
+                results.push({ item: '分包料', detail: '30円 × ' + totalDoses + '回', amount: bf });
             }
 
             if (currentMode === 'tablet') {
