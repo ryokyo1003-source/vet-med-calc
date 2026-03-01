@@ -229,11 +229,11 @@
                             <input type="checkbox" id="useBunpo" checked>
                             <label for="useBunpo">分包機（+30円/回）</label>
                         </div>
-                        <div class="checkbox-item">
+                        <div class="checkbox-item" id="syrupOption">
                             <input type="checkbox" id="useSyrup">
                             <label for="useSyrup">シロップ（+500円）</label>
                         </div>
-                        <div class="checkbox-item">
+                        <div class="checkbox-item" id="capsuleOption">
                             <input type="checkbox" id="useCapsule">
                             <label for="useCapsule">カプセル詰め（+800円）</label>
                         </div>
@@ -344,6 +344,14 @@
             document.querySelectorAll('.mode-btn').forEach(function(btn) {
                 btn.classList.toggle('active', btn.dataset.mode === mode);
             });
+            // 錠剤モードではシロップ・カプセルを非表示＆OFF
+            var isPowder = mode === 'powder';
+            document.getElementById('syrupOption').style.display = isPowder ? 'flex' : 'none';
+            document.getElementById('capsuleOption').style.display = isPowder ? 'flex' : 'none';
+            if (!isPowder) {
+                document.getElementById('useSyrup').checked = false;
+                document.getElementById('useCapsule').checked = false;
+            }
             rebuildDrugInputs();
             scheduleCalc();
         }
@@ -464,7 +472,8 @@
                 h += '<div class="form-group" style="margin-bottom:0"><label>1回あたりの量</label>';
                 h += '<select id="drugAmount_' + id + '">';
                 h += '<option value="0.25">1/4錠</option><option value="0.5">1/2錠</option>';
-                h += '<option value="1" selected>1錠</option><option value="1.5">1.5錠</option>';
+                h += '<option value="1" selected>1錠</option><option value="1.25">1 1/4錠</option>';
+                h += '<option value="1.5">1 1/2錠</option><option value="1.75">1 3/4錠</option>';
                 h += '<option value="2">2錠</option><option value="3">3錠</option><option value="4">4錠</option>';
                 h += '</select></div>';
                 h += '<div class="form-group" style="margin-bottom:0"><label>分割方法</label>';
@@ -474,6 +483,7 @@
                 h += '<option value="quarter">1/4分割（+20円/回）</option>';
                 h += '</select></div>';
                 h += '</div>';
+                h += '<div id="drugTabletInfo_' + id + '" class="fee-breakdown"></div>';
             }
 
             row.innerHTML = h;
@@ -527,6 +537,35 @@
                 }
                 doseInput.addEventListener('input', autoCalc);
                 contentInput.addEventListener('input', autoCalc);
+            } else {
+                // 錠剤モード: 1回量のmg/kg表示
+                var amountSelect = document.getElementById('drugAmount_' + id);
+                var contentInput = document.getElementById('drugContent_' + id);
+                var splitSelect = document.getElementById('drugSplit_' + id);
+                function tabletCalc() {
+                    var amount = parseFloat(amountSelect.value);
+                    var content = parseFloat(contentInput.value);
+                    var w = parseFloat(document.getElementById('weight').value);
+                    var infoEl = document.getElementById('drugTabletInfo_' + id);
+                    if (amount > 0 && content > 0 && w > 0) {
+                        var mgPerDose = amount * content;
+                        var mgPerKg = mgPerDose / w;
+                        infoEl.innerHTML = '1回量: ' + mgPerDose.toFixed(1) + 'mg（' + mgPerKg.toFixed(2) + ' mg/kg）';
+                    } else {
+                        infoEl.innerHTML = '';
+                    }
+                    // 分割方法を自動選択
+                    var frac = amount % 1;
+                    if (Math.abs(frac - 0.25) < 0.01 || Math.abs(frac - 0.75) < 0.01) {
+                        splitSelect.value = 'quarter';
+                    } else if (Math.abs(frac - 0.5) < 0.01) {
+                        splitSelect.value = 'half';
+                    } else {
+                        splitSelect.value = 'none';
+                    }
+                }
+                amountSelect.addEventListener('change', tabletCalc);
+                contentInput.addEventListener('input', tabletCalc);
             }
 
             // ドロップダウン閉じ
@@ -1030,11 +1069,15 @@
         // 基本設定のリアルタイム監視
         // =========================================
         function triggerAllAutoCalc() {
-            // 全drug行のmg/kg入力にinputイベントを発火して再計算
+            // 全drug行の再計算を発火
             document.querySelectorAll('.drug-input-row').forEach(function(row) {
                 var rowId = row.id.split('_')[1];
+                // 散剤モード: mg/kg入力にinputイベント
                 var doseInput = document.getElementById('drugDoseMgKg_' + rowId);
                 if (doseInput) doseInput.dispatchEvent(new Event('input'));
+                // 錠剤モード: 量セレクトにchangeイベント
+                var amountSelect = document.getElementById('drugAmount_' + rowId);
+                if (amountSelect) amountSelect.dispatchEvent(new Event('change'));
             });
         }
 
