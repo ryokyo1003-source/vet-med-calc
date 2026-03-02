@@ -225,7 +225,7 @@
                     </div>
                     <div class="section-title">調剤オプション</div>
                     <div class="checkbox-group">
-                        <div class="checkbox-item">
+                        <div class="checkbox-item" id="bunpoOption">
                             <input type="checkbox" id="useBunpo" checked>
                             <label for="useBunpo">分包機（+30円/回）</label>
                         </div>
@@ -285,7 +285,10 @@
                         </div>
                         <h3 style="font-size: 13px; margin-top: 16px;">処方料</h3>
                         <ul style="font-size: 12px; line-height: 1.8;">
-                            <li>基本: 80円/日（混合処方：1処方あたり）</li>
+                            <li>1剤目: 80円/日</li>
+                            <li>2剤目以降（混合）: 40円/日</li>
+                            <li>※別処方の場合は80円/日</li>
+                            <li style="color:#2e7d32;">※長期処方割引: 技術料は14日分が上限</li>
                         </ul>
                         <h3 style="font-size: 13px; margin-top: 16px;">薬剤料（原価×倍率）</h3>
                         <ul style="font-size: 12px; line-height: 1.8;">
@@ -299,8 +302,9 @@
                         <h3 style="font-size: 13px; margin-top: 16px;">調剤料</h3>
                         <ul style="font-size: 12px; line-height: 1.8;">
                             <li>分包機: 30円/回</li>
-                            <li>1/2分割: +10円/回</li>
-                            <li>1/4分割: +20円/回</li>
+                            <li>1/2分割: +20円/錠</li>
+                            <li>1/4分割: +30円/錠</li>
+                            <li>3/4分割: +50円/錠（1/2+1/4）</li>
                             <li>シロップ: +500円</li>
                             <li>カプセル詰め: +800円</li>
                         </ul>
@@ -327,6 +331,7 @@
         var drugCounter = 0;
         var CALCULATION_HISTORY = [];
         var calcTimer = null;
+        var dropdownListenerAdded = false;
 
         // =========================================
         // リアルタイム計算トリガー
@@ -344,10 +349,15 @@
             document.querySelectorAll('.mode-btn').forEach(function(btn) {
                 btn.classList.toggle('active', btn.dataset.mode === mode);
             });
-            // 錠剤モードではシロップ・カプセルを非表示＆OFF
             var isPowder = mode === 'powder';
+            // 散剤モード: 分包は常にON（非表示）、シロップ・カプセル表示
+            // 錠剤モード: 分包チェック表示、シロップ・カプセル非表示
+            document.getElementById('bunpoOption').style.display = isPowder ? 'none' : 'flex';
             document.getElementById('syrupOption').style.display = isPowder ? 'flex' : 'none';
             document.getElementById('capsuleOption').style.display = isPowder ? 'flex' : 'none';
+            if (isPowder) {
+                document.getElementById('useBunpo').checked = true;
+            }
             if (!isPowder) {
                 document.getElementById('useSyrup').checked = false;
                 document.getElementById('useCapsule').checked = false;
@@ -363,10 +373,12 @@
                 var nameEl = document.getElementById('drugName_' + id);
                 var costEl = document.getElementById('drugCost_' + id);
                 var contentEl = document.getElementById('drugContent_' + id);
+                var doseEl = document.getElementById('drugDoseMgKg_' + id);
                 currentDrugs.push({
                     name: nameEl ? nameEl.value : '',
                     cost: costEl ? costEl.value : '',
-                    contentMg: contentEl ? contentEl.value : ''
+                    contentMg: contentEl ? contentEl.value : '',
+                    doseMgKg: doseEl ? doseEl.value : ''
                 });
             });
             document.getElementById('drugsList').innerHTML = '';
@@ -374,7 +386,18 @@
             if (currentDrugs.length === 0) {
                 addDrugRow();
             } else {
-                currentDrugs.forEach(function(d) { addDrugRow(d.name, d.cost, d.contentMg); });
+                currentDrugs.forEach(function(d, i) {
+                    addDrugRow(d.name, d.cost, d.contentMg);
+                    // mg/kgの値を復元
+                    if (d.doseMgKg) {
+                        var rowId = i + 1; // drugCounterは1から開始
+                        var doseInput = document.getElementById('drugDoseMgKg_' + rowId);
+                        if (doseInput) {
+                            doseInput.value = d.doseMgKg;
+                            doseInput.dispatchEvent(new Event('input'));
+                        }
+                    }
+                });
             }
         }
 
@@ -449,6 +472,8 @@
             h += '<button class="btn-small remove-btn" onclick="removeDrugRow(' + id + ')">✕</button>';
             h += '<div class="inputs">';
             h += '<div class="form-group" style="margin-bottom:0"><label>薬剤名</label>';
+            h += '<label class="separate-rx-label" id="separateRxLabel_' + id + '" style="display:none;font-size:11px;color:#666;margin-top:2px;">';
+            h += '<input type="checkbox" id="separateRx_' + id + '" style="margin-right:4px;">別処方（80円/日）</label>';
             h += '<div class="drug-select-wrapper">';
             h += '<input type="text" id="drugName_' + id + '" placeholder="薬剤名..." value="' + esc(prefillName) + '" oninput="searchDrug(' + id + ')" onfocus="showDropdown(' + id + ')">';
             h += '<div class="drug-dropdown" id="drugDropdown_' + id + '"></div></div></div>';
@@ -485,8 +510,9 @@
                 h += '<div class="form-group" style="margin-bottom:0"><label>分割方法</label>';
                 h += '<select id="drugSplit_' + id + '">';
                 h += '<option value="none">分割なし</option>';
-                h += '<option value="half">1/2分割（+10円/回）</option>';
-                h += '<option value="quarter">1/4分割（+20円/回）</option>';
+                h += '<option value="half">1/2分割（+20円/錠）</option>';
+                h += '<option value="quarter">1/4分割（+30円/錠）</option>';
+                h += '<option value="three-quarter">3/4分割（+50円/錠）</option>';
                 h += '</select></div>';
                 h += '</div>';
                 h += '<div id="drugTabletInfo_' + id + '" class="fee-breakdown"></div>';
@@ -494,6 +520,9 @@
 
             row.innerHTML = h;
             document.getElementById('drugsList').appendChild(row);
+
+            // 別処方チェックボックスの表示更新
+            updateSeparateRxVisibility();
 
             // イベントリスナー（リアルタイム計算）
             var allInputs = row.querySelectorAll('input, select');
@@ -526,6 +555,10 @@
                         var totalDevPct = ((actualMg - total) / total * 100);
                         var totalDevSign = totalDevPct >= 0 ? '+' : '';
                         info.innerHTML = '1回: ' + single.toFixed(2) + 'mg (' + (single/c).toFixed(2) + '錠分) / 総量: ' + total.toFixed(1) + 'mg → ' + tabs + '錠（' + actualMg.toFixed(1) + 'mg, ' + totalDevSign + totalDevPct.toFixed(1) + '%）';
+                        if (Math.abs(totalDevPct) >= 10) {
+                            info.innerHTML += '<div style="background:#fee;color:#c41e3a;padding:6px 10px;border-radius:5px;margin-top:6px;font-weight:600;font-size:12px;">'
+                                + '\u26A0 目標用量との乖離が10%を超えています（' + totalDevSign + totalDevPct.toFixed(1) + '%）。錠数を手動調整するか別剤型を検討してください</div>';
+                        }
 
                         // 最適剤型組み合わせ計算
                         var drugName = document.getElementById('drugName_' + id).value.trim();
@@ -619,7 +652,16 @@
                     }
                     // 分割方法を自動選択
                     var frac = amount % 1;
-                    if (Math.abs(frac - 0.25) < 0.01 || Math.abs(frac - 0.75) < 0.01) {
+                    if (Math.abs(frac - 0.75) < 0.01) {
+                        splitSelect.value = 'three-quarter';
+                        var freq = parseInt(document.getElementById('frequency').value) || 1;
+                        var dy = parseInt(document.getElementById('days').value) || 1;
+                        var td = freq * dy;
+                        var tabletsToSplit = Math.ceil(0.75 * td);
+                        var totalSaving = 50 * tabletsToSplit;
+                        infoEl.innerHTML += '<div style="background:#fff3cd;color:#856404;padding:6px 10px;border-radius:5px;margin-top:6px;font-weight:600;font-size:12px;">'
+                            + '\uD83D\uDCA1 3/4錠は分割料が50円/錠×' + tabletsToSplit + '錠=' + totalSaving + '円かかります。散剤にすると分割料不要です</div>';
+                    } else if (Math.abs(frac - 0.25) < 0.01) {
                         splitSelect.value = 'quarter';
                     } else if (Math.abs(frac - 0.5) < 0.01) {
                         splitSelect.value = 'half';
@@ -633,12 +675,15 @@
                 amountSelect.addEventListener('change', tabletCalc);
             }
 
-            // ドロップダウン閉じ
-            document.addEventListener('click', function(e) {
-                if (!e.target.closest('.drug-select-wrapper')) {
-                    document.querySelectorAll('.drug-dropdown').forEach(function(d) { d.classList.remove('show'); });
-                }
-            });
+            // ドロップダウン閉じ（1回だけ登録）
+            if (!dropdownListenerAdded) {
+                dropdownListenerAdded = true;
+                document.addEventListener('click', function(e) {
+                    if (!e.target.closest('.drug-select-wrapper')) {
+                        document.querySelectorAll('.drug-dropdown').forEach(function(d) { d.classList.remove('show'); });
+                    }
+                });
+            }
         }
 
         function esc(s) {
@@ -647,7 +692,18 @@
 
         function removeDrugRow(id) {
             var r = document.getElementById('drug_' + id);
-            if (r) { r.remove(); scheduleCalc(); }
+            if (r) { r.remove(); updateSeparateRxVisibility(); scheduleCalc(); }
+        }
+
+        function updateSeparateRxVisibility() {
+            var rows = document.querySelectorAll('.drug-input-row');
+            rows.forEach(function(row, index) {
+                var id = row.id.split('_')[1];
+                var label = document.getElementById('separateRxLabel_' + id);
+                if (label) {
+                    label.style.display = index === 0 ? 'none' : 'inline-flex';
+                }
+            });
         }
 
         // =========================================
@@ -876,9 +932,10 @@
             var frequency = parseInt(document.getElementById('frequency').value);
             var days = parseInt(document.getElementById('days').value);
             var weight = parseFloat(document.getElementById('weight').value) || 0;
-            var useBunpo = document.getElementById('useBunpo').checked;
+            var useBunpo = currentMode === 'powder' ? true : document.getElementById('useBunpo').checked;
             var useSyrup = document.getElementById('useSyrup').checked;
             var useCapsule = document.getElementById('useCapsule').checked;
+            if (isNaN(frequency) || frequency <= 0 || isNaN(days) || days <= 0) return;
             var totalDoses = frequency * days;
             var drugRows = document.querySelectorAll('.drug-input-row');
             var freqText = ['','SID','BID','TID','QID'][frequency] || frequency + '回/日';
@@ -899,9 +956,11 @@
                 var amountPerDose = 0;
                 var splitType = 'none';
 
+                var rawTabletsActual = 0; // 散剤の実際の使用量（端数）
                 if (currentMode === 'powder') {
                     var tabEl = document.getElementById('drugTablets_' + id);
                     var rawTablets = tabEl ? parseFloat(tabEl.value) : 0;
+                    rawTabletsActual = rawTablets;
                     tabletsUsed = Math.ceil(rawTablets); // 費用計算は切り上げ
                     if (isNaN(tabletsUsed) || tabletsUsed <= 0) return;
                 } else {
@@ -913,12 +972,17 @@
                     tabletsUsed = Math.ceil(amountPerDose * totalDoses);
                 }
 
+                var separateRxEl = document.getElementById('separateRx_' + id);
+                var isSeparateRx = separateRxEl ? separateRxEl.checked : false;
+
                 validDrugs.push({
                     name: drugName,
                     cost: cost,
                     tabletsUsed: tabletsUsed,
+                    rawTabletsActual: rawTabletsActual,
                     amountPerDose: amountPerDose,
-                    splitType: splitType
+                    splitType: splitType,
+                    isSeparateRx: isSeparateRx
                 });
             });
 
@@ -933,12 +997,24 @@
             var results = [];
             var totalCost = 0;
 
-            // ========== 処方料（混合処方前提: 1処方80円/日） ==========
-            var prescriptionFee = 80 * days;
-            results.push({
-                item: '処方料',
-                detail: '80円 × ' + days + '日',
-                amount: prescriptionFee
+            // ========== 長期処方キャップ（技術料は最大14日分まで） ==========
+            var FEE_CAP_DAYS = 14;
+            var cappedDays = Math.min(days, FEE_CAP_DAYS);
+            var cappedDoses = Math.min(totalDoses, frequency * FEE_CAP_DAYS);
+            var isLongTerm = days > FEE_CAP_DAYS;
+
+            // ========== 処方料（1剤目80円/日、2剤目以降40円/日、別処方は80円/日） ==========
+            var prescriptionFee = 0;
+            validDrugs.forEach(function(drug, index) {
+                var rate = (index === 0 || drug.isSeparateRx) ? 80 : 40;
+                var fee = rate * cappedDays;
+                prescriptionFee += fee;
+                var capNote = isLongTerm ? '（上限' + FEE_CAP_DAYS + '日）' : '';
+                results.push({
+                    item: '処方料' + (validDrugs.length > 1 ? '（' + drug.name + '）' : ''),
+                    detail: rate + '円 × ' + cappedDays + '日' + capNote,
+                    amount: fee
+                });
             });
             totalCost += prescriptionFee;
 
@@ -948,9 +1024,13 @@
                 var raw = drug.cost * mult * drug.tabletsUsed;
                 var rounded = roundUp10(raw);
                 totalCost += rounded;
+                var tabNote = '';
+                if (drug.rawTabletsActual > 0 && drug.rawTabletsActual < drug.tabletsUsed) {
+                    tabNote = '（使用量' + drug.rawTabletsActual + '錠→' + drug.tabletsUsed + '錠分請求）';
+                }
                 results.push({
                     item: '薬剤料（' + drug.name + '）',
-                    detail: drug.cost.toFixed(1) + '円 × ' + mult + '倍 × ' + drug.tabletsUsed + '錠 = ' + raw.toFixed(1) + '円 → ' + rounded + '円',
+                    detail: drug.cost.toFixed(1) + '円 × ' + mult + '倍 × ' + drug.tabletsUsed + '錠' + tabNote + ' = ' + raw.toFixed(1) + '円 → ' + rounded + '円',
                     amount: rounded
                 });
             });
@@ -959,21 +1039,29 @@
             var dispensingFee = 0;
 
             if (useBunpo) {
-                var bf = 30 * totalDoses;
+                var bf = 30 * cappedDoses;
                 dispensingFee += bf;
-                results.push({ item: '分包料', detail: '30円 × ' + totalDoses + '回', amount: bf });
+                var capNote = isLongTerm ? '（上限' + cappedDoses + '回）' : '';
+                results.push({ item: '分包料', detail: '30円 × ' + cappedDoses + '回' + capNote, amount: bf });
             }
 
             if (currentMode === 'tablet') {
                 validDrugs.forEach(function(drug) {
+                    var frac = drug.amountPerDose % 1;
+                    var tabletsToSplit = Math.ceil(frac * cappedDoses);
+                    var capNote = isLongTerm ? '（上限）' : '';
                     if (drug.splitType === 'half') {
-                        var sf = 10 * totalDoses;
+                        var sf = 20 * tabletsToSplit;
                         dispensingFee += sf;
-                        results.push({ item: '分割料（' + drug.name + '）', detail: '1/2 10円 × ' + totalDoses + '回', amount: sf });
+                        results.push({ item: '分割料（' + drug.name + '）', detail: '1/2 20円 × ' + tabletsToSplit + '錠' + capNote, amount: sf });
                     } else if (drug.splitType === 'quarter') {
-                        var sf2 = 20 * totalDoses;
+                        var sf2 = 30 * tabletsToSplit;
                         dispensingFee += sf2;
-                        results.push({ item: '分割料（' + drug.name + '）', detail: '1/4 20円 × ' + totalDoses + '回', amount: sf2 });
+                        results.push({ item: '分割料（' + drug.name + '）', detail: '1/4 30円 × ' + tabletsToSplit + '錠' + capNote, amount: sf2 });
+                    } else if (drug.splitType === 'three-quarter') {
+                        var sf3 = 50 * tabletsToSplit;
+                        dispensingFee += sf3;
+                        results.push({ item: '分割料（' + drug.name + '）', detail: '3/4 (1/2+1/4) 50円 × ' + tabletsToSplit + '錠' + capNote, amount: sf3 });
                     }
                 });
             }
@@ -999,9 +1087,23 @@
             if (currentMode === 'powder') {
                 // 散剤: ・内服薬@1回単価x総回数
                 rxText += '\u30FB\u5185\u670D\u85AC@' + perDose + 'x' + totalDoses + '\n';
-                // 薬剤一覧を1行にまとめる
+                // 薬剤一覧を1行にまとめる（実際の使用量を表示）
                 var drugLine = validDrugs.map(function(d) {
-                    return d.name + ' ' + d.tabletsUsed + 't';
+                    var displayTablets = d.rawTabletsActual > 0 ? d.rawTabletsActual : d.tabletsUsed;
+                    // 端数を分数表記に変換
+                    var frac = displayTablets % 1;
+                    var whole = Math.floor(displayTablets);
+                    var fracText = '';
+                    if (Math.abs(frac - 0.25) < 0.01) fracText = '1/4';
+                    else if (Math.abs(frac - 0.5) < 0.01) fracText = '1/2';
+                    else if (Math.abs(frac - 0.75) < 0.01) fracText = '3/4';
+                    var tabText;
+                    if (fracText) {
+                        tabText = whole > 0 ? whole + '+' + fracText : fracText;
+                    } else {
+                        tabText = String(displayTablets);
+                    }
+                    return d.name + ' ' + tabText + 't';
                 }).join('  ');
                 rxText += drugLine + '\n';
                 rxText += totalDoses + '\u5206\u5305\u3000\u7C89 ' + freqText + ' ' + days + '\u65E5\u5206';
@@ -1010,15 +1112,27 @@
                 rxText += '\u30FB\u5185\u670D\u85AC@' + perDose + 'x' + totalDoses + '\n';
                 // 各薬剤を表示
                 validDrugs.forEach(function(d) {
+                    var amtFrac = d.amountPerDose % 1;
+                    var amtWhole = Math.floor(d.amountPerDose);
+                    var amtFracText = '';
+                    if (Math.abs(amtFrac - 0.25) < 0.01) amtFracText = '1/4';
+                    else if (Math.abs(amtFrac - 0.5) < 0.01) amtFracText = '1/2';
+                    else if (Math.abs(amtFrac - 0.75) < 0.01) amtFracText = '3/4';
                     var amtText;
-                    if (d.amountPerDose === 0.25) amtText = '1/4';
-                    else if (d.amountPerDose === 0.5) amtText = '1/2';
-                    else amtText = String(d.amountPerDose);
+                    if (amtFracText) {
+                        amtText = amtWhole > 0 ? amtWhole + '+' + amtFracText : amtFracText;
+                    } else {
+                        amtText = String(d.amountPerDose);
+                    }
                     rxText += d.name + ' ' + amtText + 't/\u56DE\n';
                 });
-                var totalTabsAll = 0;
-                validDrugs.forEach(function(d) { totalTabsAll += d.tabletsUsed; });
-                rxText += 'TAB ' + totalTabsAll + '\u30F6 ' + freqText + ' ' + days + '\u65E5\u5206';
+                if (useBunpo) {
+                    rxText += 'TAB ' + totalDoses + '\u5206\u5305\u3000' + freqText + ' ' + days + '\u65E5\u5206';
+                } else {
+                    var totalTabsAll = 0;
+                    validDrugs.forEach(function(d) { totalTabsAll += d.tabletsUsed; });
+                    rxText += 'TAB ' + totalTabsAll + '\u30F6 ' + freqText + ' ' + days + '\u65E5\u5206';
+                }
             }
 
             // ========== 結果HTML ==========
@@ -1030,6 +1144,10 @@
                 rhtml += '<td style="text-align:right;">' + r.amount.toLocaleString() + '円</td></tr>';
             });
             rhtml += '</tbody></table>';
+            if (isLongTerm) {
+                rhtml += '<div style="background:#e8f5e9;color:#2e7d32;padding:8px 12px;border-radius:6px;margin:8px 0;font-size:12px;font-weight:600;">'
+                    + '\uD83C\uDF3F 長期処方割引適用中：技術料（処方料・分包料・分割料）は' + FEE_CAP_DAYS + '日分を上限としています</div>';
+            }
             rhtml += '<div class="total-cost">\u5185\u670D\u85AC@' + totalDisplay + '</div>';
 
             rhtml += '<div style="margin-top:12px;font-size:13px;font-weight:600;">カルテ貼付用テキスト <span style="font-weight:400;color:#888;font-size:11px;">（クリックでコピー）</span></div>';
