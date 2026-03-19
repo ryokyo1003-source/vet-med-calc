@@ -486,16 +486,16 @@
             if (currentMode === 'powder') {
                 h += '<div class="extra-options">';
                 h += '<div class="form-group" style="margin-bottom:0"><label>用量（mg/kg）</label>';
-                h += '<input type="number" id="drugDoseMgKg_' + id + '" step="0.1" placeholder="mg/kg"></div>';
+                h += '<input type="number" id="drugDoseMgKg_' + id + '" step="0.1" min="0" placeholder="mg/kg"></div>';
                 h += '<div class="form-group" style="margin-bottom:0"><label>必要錠数（自動 or 直接入力）</label>';
-                h += '<input type="number" id="drugTablets_' + id + '" step="0.1" placeholder="自動計算"></div>';
+                h += '<input type="number" id="drugTablets_' + id + '" step="0.25" min="0" placeholder="自動計算"></div>';
                 h += '</div>';
                 h += '<div id="drugCalcInfo_' + id + '" class="fee-breakdown"></div>';
                 h += '<div id="drugOptimalCombo_' + id + '" class="optimal-combo" style="display:none;"></div>';
             } else {
                 h += '<div class="extra-options" style="grid-template-columns: 1fr 1fr 1fr;">';
                 h += '<div class="form-group" style="margin-bottom:0"><label>用量（mg/kg）</label>';
-                h += '<input type="number" id="drugDoseMgKg_' + id + '" step="0.1" placeholder="mg/kg"></div>';
+                h += '<input type="number" id="drugDoseMgKg_' + id + '" step="0.1" min="0" placeholder="mg/kg"></div>';
                 h += '<div class="form-group" style="margin-bottom:0"><label>1回あたりの量（自動）</label>';
                 h += '<select id="drugAmount_' + id + '">';
                 h += '<option value="0.25">1/4錠</option><option value="0.5">1/2錠</option>';
@@ -599,8 +599,10 @@
                             comboEl.style.display = 'none';
                         }
                     } else {
+                        tabletsInput.value = '';
                         info.innerHTML = '';
                         if (comboEl) comboEl.style.display = 'none';
+                        scheduleCalc();
                     }
                 }
                 doseInput.addEventListener('input', autoCalc);
