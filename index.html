@@ -124,7 +124,7 @@
         }
         .drug-dropdown.show { display: block; }
         .drug-option { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee; font-size: 13px; }
-        .drug-option:hover { background: #f0f4ff; }
+        .drug-option:hover, .drug-option.highlighted { background: #f0f4ff; }
         .drug-option .price { color: #666; font-size: 11px; margin-left: 6px; }
         .drug-option .formulation { color: #999; font-size: 10px; margin-left: 4px; }
         .optimal-combo {
@@ -530,6 +530,35 @@
                 el.addEventListener('input', scheduleCalc);
                 el.addEventListener('change', scheduleCalc);
             });
+
+            // 薬剤名ドロップダウン キーボードナビゲーション
+            (function() {
+                var nameInput = document.getElementById('drugName_' + id);
+                var dd = document.getElementById('drugDropdown_' + id);
+                nameInput.addEventListener('keydown', function(e) {
+                    var items = dd.querySelectorAll('.drug-option');
+                    var active = dd.querySelector('.drug-option.highlighted');
+                    var idx = -1;
+                    items.forEach(function(item, i) { if (item === active) idx = i; });
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (!dd.classList.contains('show') && items.length > 0) { dd.classList.add('show'); }
+                        var next = idx + 1 < items.length ? idx + 1 : 0;
+                        if (active) active.classList.remove('highlighted');
+                        items[next].classList.add('highlighted');
+                        items[next].scrollIntoView({ block: 'nearest' });
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        var prev = idx - 1 >= 0 ? idx - 1 : items.length - 1;
+                        if (active) active.classList.remove('highlighted');
+                        if (items[prev]) { items[prev].classList.add('highlighted'); items[prev].scrollIntoView({ block: 'nearest' }); }
+                    } else if (e.key === 'Enter') {
+                        if (active) { e.preventDefault(); active.click(); }
+                    } else if (e.key === 'Escape') {
+                        dd.classList.remove('show');
+                    }
+                });
+            })();
 
             // 散剤モード自動錠数計算
             if (currentMode === 'powder') {
