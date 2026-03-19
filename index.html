@@ -964,7 +964,11 @@
             var useBunpo = currentMode === 'powder' ? true : document.getElementById('useBunpo').checked;
             var useSyrup = document.getElementById('useSyrup').checked;
             var useCapsule = document.getElementById('useCapsule').checked;
-            if (isNaN(frequency) || frequency <= 0 || isNaN(days) || days <= 0) return;
+            if (isNaN(frequency) || frequency <= 0 || isNaN(days) || days <= 0) {
+                document.getElementById('resultArea').innerHTML =
+                    '<p style="color:#999;text-align:center;padding:30px;font-size:13px;">薬剤を入力すると自動で計算されます</p>';
+                return;
+            }
             var totalDoses = frequency * days;
             var drugRows = document.querySelectorAll('.drug-input-row');
             var freqText = ['','SID','BID','TID','QID'][frequency] || frequency + '回/日';
@@ -1016,10 +1020,8 @@
             });
 
             if (validDrugs.length === 0) {
-                if (!silent) {
-                    document.getElementById('resultArea').innerHTML =
-                        '<p style="color:#999;text-align:center;padding:30px;font-size:13px;">薬剤を入力すると自動で計算されます</p>';
-                }
+                document.getElementById('resultArea').innerHTML =
+                    '<p style="color:#999;text-align:center;padding:30px;font-size:13px;">薬剤を入力すると自動で計算されます</p>';
                 return;
             }
 
