@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>薬剤費用計算 v9.1 - 上桂動物病院</title>
+    <title>薬剤費用計算 v9.3 - 上桂動物病院</title>
     <style>
         :root {
             --primary: #0a84ff;
@@ -180,13 +180,23 @@
             background: var(--bg); padding: 10px; border-radius: 6px;
             margin-bottom: 6px; border-left: 4px solid var(--primary); font-size: 11px;
         }
+        .template-item {
+            display: flex; align-items: center; gap: 8px; background: var(--bg);
+            padding: 8px 10px; border-radius: 6px; margin-bottom: 6px;
+            border-left: 4px solid var(--warning); font-size: 12px;
+        }
+        .template-item .template-info { flex: 1; cursor: pointer; }
+        .template-item .template-info:hover { color: var(--primary); }
+        .template-item .template-name { font-weight: 600; }
+        .template-item .template-drugs { color: #888; font-size: 11px; margin-top: 2px; }
+        .template-item .template-actions { display: flex; gap: 4px; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
             <h1>薬剤費用計算システム</h1>
-            <div class="version">v9.1 - 上桂動物病院（散剤・錠剤対応）</div>
+            <div class="version">v9.3 - 上桂動物病院（散剤・錠剤対応）</div>
         </div>
 
         <div id="globalAlerts"></div>
@@ -237,6 +247,27 @@
                             <input type="checkbox" id="useCapsule">
                             <label for="useCapsule">カプセル詰め（+800円）</label>
                         </div>
+                    </div>
+                </div>
+
+                <!-- 前回処方読み込み -->
+                <div class="card">
+                    <h2>前回処方読み込み</h2>
+                    <div style="font-size:11px;color:#888;margin-bottom:8px;">カルテテキストを貼り付けて薬剤を自動入力（既存の薬剤に追加されます）</div>
+                    <textarea id="importText" rows="3" placeholder="例:&#10;セファクリア錠300 2t  アモキクリア錠50 3+1/2t&#10;14分包　粉 BID 7日分" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;resize:vertical;"></textarea>
+                    <div style="display:flex;gap:8px;margin-top:8px;">
+                        <button style="flex:1;padding:8px;background:var(--primary);color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;" onclick="importFromCarteText()">読み込み</button>
+                        <button style="padding:8px 12px;background:var(--bg);color:#666;border:1px solid var(--border);border-radius:6px;font-size:12px;cursor:pointer;" onclick="document.getElementById('importText').value='';">クリア</button>
+                    </div>
+                </div>
+
+                <!-- テンプレート -->
+                <div class="card">
+                    <h2>処方テンプレート</h2>
+                    <div id="templateList"></div>
+                    <div style="display:flex;gap:8px;margin-top:8px;">
+                        <input type="text" id="templateName" placeholder="テンプレート名（例: 外傷セット）" style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px;">
+                        <button style="padding:8px 12px;background:var(--success);color:white;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;" onclick="saveTemplate()">現在の処方を保存</button>
                     </div>
                 </div>
 
@@ -975,7 +1006,11 @@
             var drugRows = document.querySelectorAll('.drug-input-row');
             var freqText = ['','SID','BID','TID','QID'][frequency] || frequency + '回/日';
 
-            if (drugRows.length === 0) return;
+            if (drugRows.length === 0) {
+                document.getElementById('resultArea').innerHTML =
+                    '<p style="color:#999;text-align:center;padding:30px;font-size:13px;">薬剤を入力すると自動で計算されます</p>';
+                return;
+            }
 
             // 有効薬剤を収集
             var validDrugs = [];
@@ -1311,6 +1346,336 @@
         }
 
         // =========================================
+        // 前回処方読み込み
+        // =========================================
+        function importFromCarteText() {
+            var text = document.getElementById('importText').value.trim();
+            if (!text) { showAlert('テキストを入力してください', 'warning'); return; }
+
+            var parsed = parseCarteText(text);
+            if (parsed.drugs.length === 0) {
+                showAlert('薬剤情報を読み取れませんでした', 'danger');
+                return;
+            }
+
+            // 基本設定の復元（読み取れた場合）
+            if (parsed.frequency > 0) document.getElementById('frequency').value = parsed.frequency;
+            if (parsed.days > 0) document.getElementById('days').value = parsed.days;
+            if (parsed.mode) setMode(parsed.mode);
+
+            // 既存の空行を削除（名前が空の行のみ）
+            document.querySelectorAll('.drug-input-row').forEach(function(row) {
+                var id = row.id.split('_')[1];
+                var nameEl = document.getElementById('drugName_' + id);
+                if (nameEl && !nameEl.value.trim()) row.remove();
+            });
+
+            // 薬剤を追加
+            parsed.drugs.forEach(function(drug) {
+                // CSVデータベースから検索
+                var match = findDrugInDatabase(drug.name);
+                var cost = match ? match.price : '';
+                var content = match ? match.contentMg : '';
+                addDrugRow(drug.name, cost, content);
+
+                // 散剤モードの場合、必要錠数を設定
+                if (currentMode === 'powder' && drug.tablets > 0) {
+                    var lastId = drugCounter;
+                    var tabletsInput = document.getElementById('drugTablets_' + lastId);
+                    if (tabletsInput) {
+                        tabletsInput.value = drug.tablets;
+                        scheduleCalc();
+                    }
+                }
+                // 錠剤モードの場合、1回量を設定
+                if (currentMode === 'tablet' && drug.perDose > 0) {
+                    var lastId = drugCounter;
+                    var amountSelect = document.getElementById('drugAmount_' + lastId);
+                    if (amountSelect) {
+                        // ドロップダウンに値がなければ追加
+                        var found = false;
+                        for (var i = 0; i < amountSelect.options.length; i++) {
+                            if (Math.abs(parseFloat(amountSelect.options[i].value) - drug.perDose) < 0.01) {
+                                found = true; break;
+                            }
+                        }
+                        if (!found) {
+                            var opt = document.createElement('option');
+                            opt.value = drug.perDose;
+                            opt.textContent = drug.perDose + '錠';
+                            amountSelect.appendChild(opt);
+                        }
+                        amountSelect.value = drug.perDose;
+                        amountSelect.dispatchEvent(new Event('change'));
+                    }
+                }
+            });
+
+            updateSeparateRxVisibility();
+            scheduleCalc();
+            showAlert(parsed.drugs.length + '件の薬剤を読み込みました', 'success');
+            document.getElementById('importText').value = '';
+        }
+
+        function parseCarteText(text) {
+            var result = { drugs: [], frequency: 0, days: 0, mode: '' };
+            var lines = text.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l; });
+
+            lines.forEach(function(line) {
+                // 「14分包　粉 BID 7日分」や「TAB 14分包　BID 7日分」のような行からモード・頻度・日数を取得
+                var freqMatch = line.match(/(SID|BID|TID|QID)/i);
+                if (freqMatch) {
+                    var freqMap = { 'SID': 1, 'BID': 2, 'TID': 3, 'QID': 4 };
+                    result.frequency = freqMap[freqMatch[1].toUpperCase()] || 0;
+                }
+                var daysMatch = line.match(/(\d+)\s*日分/);
+                if (daysMatch) result.days = parseInt(daysMatch[1]);
+
+                if (/粉|散剤/.test(line)) result.mode = 'powder';
+                if (/TAB|錠剤/.test(line) && !/錠\d/.test(line)) result.mode = 'tablet';
+
+                // 「・内服薬@130x14」のような行はスキップ
+                if (/^[・･]/.test(line) || /^内服薬/.test(line) || /^\d+分包/.test(line)) return;
+
+                // 薬剤パース: 「薬名 数t」「薬名 数+分数t」「薬名 分数t」パターン
+                // 複数薬剤がスペースで区切られている場合も対応
+                var drugPattern = /([^\s\d/]+[\d０-９.．]*(?:mg|μg|ug)?)\s+((?:\d+\+)?(?:\d+\/\d+|\d+(?:\.\d+)?))\s*t(?:\/回)?/gi;
+                var match;
+                while ((match = drugPattern.exec(line)) !== null) {
+                    var name = match[1].trim();
+                    var qtyStr = match[2];
+                    var qty = parseFractionQty(qtyStr);
+                    if (name && qty > 0) {
+                        result.drugs.push({ name: name, tablets: qty, perDose: qty });
+                    }
+                }
+            });
+
+            return result;
+        }
+
+        function parseFractionQty(str) {
+            // 「3+1/2」→ 3.5, 「1/4」→ 0.25, 「2」→ 2
+            if (str.includes('+')) {
+                var parts = str.split('+');
+                return parseFloat(parts[0]) + parseFractionQty(parts[1]);
+            }
+            if (str.includes('/')) {
+                var frac = str.split('/');
+                return parseFloat(frac[0]) / parseFloat(frac[1]);
+            }
+            return parseFloat(str) || 0;
+        }
+
+        function findDrugInDatabase(name) {
+            if (drugDatabase.length === 0) return null;
+            // 完全一致
+            var exact = drugDatabase.find(function(d) { return d.name === name; });
+            if (exact) return exact;
+            // 部分一致
+            var partial = drugDatabase.find(function(d) {
+                return d.name.includes(name) || name.includes(d.name);
+            });
+            return partial || null;
+        }
+
+        // =========================================
+        // テンプレート機能
+        // =========================================
+        var TEMPLATES = [];
+
+        function loadTemplates() {
+            var saved = localStorage.getItem('vet_calc_templates');
+            if (saved) {
+                try { TEMPLATES = JSON.parse(saved); } catch(e) { TEMPLATES = []; }
+            }
+            renderTemplates();
+        }
+
+        function saveTemplates() {
+            localStorage.setItem('vet_calc_templates', JSON.stringify(TEMPLATES));
+        }
+
+        function renderTemplates() {
+            var area = document.getElementById('templateList');
+            if (TEMPLATES.length === 0) {
+                area.innerHTML = '<p style="color:#999;font-size:12px;">テンプレートなし</p>';
+                return;
+            }
+            var h = '';
+            TEMPLATES.forEach(function(tpl, index) {
+                var drugNames = tpl.drugs.map(function(d) { return d.name; }).join(', ');
+                h += '<div class="template-item">';
+                h += '<div class="template-info" onclick="loadTemplate(' + index + ')">';
+                h += '<div class="template-name">' + esc(tpl.name) + '</div>';
+                h += '<div class="template-drugs">' + esc(drugNames);
+                if (tpl.mode) h += ' | ' + (tpl.mode === 'powder' ? '散剤' : '錠剤');
+                if (tpl.frequency) h += ' | ' + ['','SID','BID','TID','QID'][tpl.frequency];
+                if (tpl.days) h += ' | ' + tpl.days + '日';
+                h += '</div></div>';
+                h += '<div class="template-actions">';
+                h += '<button class="btn-small" style="background:var(--danger);font-size:10px;padding:4px 8px;" onclick="deleteTemplate(' + index + ')">✕</button>';
+                h += '</div></div>';
+            });
+            area.innerHTML = h;
+        }
+
+        function saveTemplate() {
+            var name = document.getElementById('templateName').value.trim();
+            if (!name) { showAlert('テンプレート名を入力してください', 'warning'); return; }
+
+            // 現在の薬剤情報を収集
+            var drugs = [];
+            document.querySelectorAll('.drug-input-row').forEach(function(row) {
+                var id = row.id.split('_')[1];
+                var nameEl = document.getElementById('drugName_' + id);
+                var costEl = document.getElementById('drugCost_' + id);
+                var contentEl = document.getElementById('drugContent_' + id);
+                var doseEl = document.getElementById('drugDoseMgKg_' + id);
+                var drugName = nameEl ? nameEl.value.trim() : '';
+                if (!drugName) return;
+
+                var drugData = {
+                    name: drugName,
+                    cost: costEl ? costEl.value : '',
+                    contentMg: contentEl ? contentEl.value : '',
+                    doseMgKg: doseEl ? doseEl.value : ''
+                };
+
+                if (currentMode === 'powder') {
+                    var tabEl = document.getElementById('drugTablets_' + id);
+                    drugData.tablets = tabEl ? tabEl.value : '';
+                } else {
+                    var amtEl = document.getElementById('drugAmount_' + id);
+                    var splitEl = document.getElementById('drugSplit_' + id);
+                    drugData.amountPerDose = amtEl ? amtEl.value : '1';
+                    drugData.splitType = splitEl ? splitEl.value : 'none';
+                }
+
+                var separateRxEl = document.getElementById('separateRx_' + id);
+                drugData.isSeparateRx = separateRxEl ? separateRxEl.checked : false;
+
+                drugs.push(drugData);
+            });
+
+            if (drugs.length === 0) { showAlert('薬剤が入力されていません', 'warning'); return; }
+
+            var template = {
+                name: name,
+                mode: currentMode,
+                frequency: parseInt(document.getElementById('frequency').value),
+                days: parseInt(document.getElementById('days').value),
+                useBunpo: document.getElementById('useBunpo').checked,
+                useSyrup: document.getElementById('useSyrup').checked,
+                useCapsule: document.getElementById('useCapsule').checked,
+                drugs: drugs,
+                createdAt: new Date().toISOString()
+            };
+
+            // 同名テンプレートがあれば上書き確認
+            var existIdx = TEMPLATES.findIndex(function(t) { return t.name === name; });
+            if (existIdx >= 0) {
+                if (!confirm('「' + name + '」は既に存在します。上書きしますか？')) return;
+                TEMPLATES[existIdx] = template;
+            } else {
+                TEMPLATES.push(template);
+            }
+
+            saveTemplates();
+            renderTemplates();
+            document.getElementById('templateName').value = '';
+            showAlert('テンプレート「' + name + '」を保存しました', 'success');
+        }
+
+        function loadTemplate(index) {
+            var tpl = TEMPLATES[index];
+            if (!tpl) return;
+
+            // モード・基本設定を復元
+            if (tpl.mode) setMode(tpl.mode);
+            if (tpl.frequency) document.getElementById('frequency').value = tpl.frequency;
+            if (tpl.days) document.getElementById('days').value = tpl.days;
+            if (tpl.useBunpo !== undefined) document.getElementById('useBunpo').checked = tpl.useBunpo;
+            if (tpl.useSyrup !== undefined) document.getElementById('useSyrup').checked = tpl.useSyrup;
+            if (tpl.useCapsule !== undefined) document.getElementById('useCapsule').checked = tpl.useCapsule;
+
+            // 既存の薬剤を全クリア
+            document.getElementById('drugsList').innerHTML = '';
+            drugCounter = 0;
+
+            // 薬剤を追加
+            tpl.drugs.forEach(function(drug) {
+                // CSVデータベースに最新の価格があればそちらを使う
+                var match = findDrugInDatabase(drug.name);
+                var cost = match ? match.price : drug.cost;
+                var content = match ? match.contentMg : drug.contentMg;
+
+                addDrugRow(drug.name, cost, content);
+                var lastId = drugCounter;
+
+                // mg/kgを復元
+                if (drug.doseMgKg) {
+                    var doseInput = document.getElementById('drugDoseMgKg_' + lastId);
+                    if (doseInput) {
+                        doseInput.value = drug.doseMgKg;
+                        doseInput.dispatchEvent(new Event('input'));
+                    }
+                }
+
+                // 散剤: 錠数復元
+                if (tpl.mode === 'powder' && drug.tablets) {
+                    var tabEl = document.getElementById('drugTablets_' + lastId);
+                    if (tabEl) tabEl.value = drug.tablets;
+                }
+
+                // 錠剤: 1回量・分割復元
+                if (tpl.mode === 'tablet') {
+                    if (drug.amountPerDose) {
+                        var amtEl = document.getElementById('drugAmount_' + lastId);
+                        if (amtEl) {
+                            var val = parseFloat(drug.amountPerDose);
+                            var found = false;
+                            for (var i = 0; i < amtEl.options.length; i++) {
+                                if (Math.abs(parseFloat(amtEl.options[i].value) - val) < 0.01) { found = true; break; }
+                            }
+                            if (!found) {
+                                var opt = document.createElement('option');
+                                opt.value = val;
+                                opt.textContent = val + '錠';
+                                amtEl.appendChild(opt);
+                            }
+                            amtEl.value = val;
+                        }
+                    }
+                    if (drug.splitType) {
+                        var splitEl = document.getElementById('drugSplit_' + lastId);
+                        if (splitEl) splitEl.value = drug.splitType;
+                    }
+                }
+
+                // 別処方
+                if (drug.isSeparateRx) {
+                    var sepEl = document.getElementById('separateRx_' + lastId);
+                    if (sepEl) sepEl.checked = true;
+                }
+            });
+
+            updateSeparateRxVisibility();
+            scheduleCalc();
+            showAlert('テンプレート「' + tpl.name + '」を読み込みました', 'success');
+        }
+
+        function deleteTemplate(index) {
+            var tpl = TEMPLATES[index];
+            if (!tpl) return;
+            if (!confirm('テンプレート「' + tpl.name + '」を削除しますか？')) return;
+            TEMPLATES.splice(index, 1);
+            saveTemplates();
+            renderTemplates();
+            showAlert('テンプレートを削除しました', 'success');
+        }
+
+        // =========================================
         // 初期化
         // =========================================
         window.addEventListener('load', function() {
@@ -1322,6 +1687,7 @@
             if (saved) {
                 try { CALCULATION_HISTORY = JSON.parse(saved); updateHistory(); } catch(e) {}
             }
+            loadTemplates();
         });
     </script>
 </body>
