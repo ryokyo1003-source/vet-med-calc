@@ -127,6 +127,16 @@
         .drug-option:hover, .drug-option.highlighted { background: #f0f4ff; }
         .drug-option .price { color: #666; font-size: 11px; margin-left: 6px; }
         .drug-option .formulation { color: #999; font-size: 10px; margin-left: 4px; }
+        .btn-guide {
+            display: inline-flex; align-items: center; gap: 3px;
+            padding: 3px 8px; background: #fff3e0; color: #e65100; border: 1px solid #ffcc02;
+            border-radius: 4px; font-size: 10px; font-weight: 600; cursor: pointer;
+            text-decoration: none; white-space: nowrap; transition: all 0.2s;
+        }
+        .btn-guide:hover { background: #ffe0b2; border-color: #e65100; }
+        .drug-guide-links { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+        .result-drug-link { color: var(--primary); text-decoration: underline; cursor: pointer; }
+        .result-drug-link:hover { color: #0056b3; }
         .optimal-combo {
             background: #f0f8ff; border: 2px solid #b3d9ff; border-radius: 8px;
             padding: 10px 12px; margin-top: 8px; font-size: 12px; line-height: 1.6;
@@ -360,6 +370,24 @@
         var currentMode = 'powder';
         var drugDatabase = [];
         var drugCounter = 0;
+
+        // =========================================
+        // 薬用量ガイドリンク
+        // =========================================
+        // eduone.jpの検索URLベース（ログイン必要）
+        var EDUONE_BASE = 'https://search.eduone.jp/';
+
+        function openDrugGuide(id) {
+            var nameEl = document.getElementById('drugName_' + id);
+            var drugName = nameEl ? nameEl.value.trim() : '';
+            if (!drugName) { showAlert('薬剤名を入力してください', 'warning'); return; }
+            window.open(EDUONE_BASE + '?q=' + encodeURIComponent(drugName), '_blank');
+        }
+
+        function openDrugGuideByName(drugName) {
+            if (!drugName) return;
+            window.open(EDUONE_BASE + '?q=' + encodeURIComponent(drugName), '_blank');
+        }
         var CALCULATION_HISTORY = [];
         var calcTimer = null;
         var dropdownListenerAdded = false;
@@ -507,7 +535,10 @@
             h += '<input type="checkbox" id="separateRx_' + id + '" style="margin-right:4px;">別処方（80円/日）</label>';
             h += '<div class="drug-select-wrapper">';
             h += '<input type="text" id="drugName_' + id + '" placeholder="薬剤名..." value="' + esc(prefillName) + '" oninput="searchDrug(' + id + ')" onfocus="showDropdown(' + id + ')">';
-            h += '<div class="drug-dropdown" id="drugDropdown_' + id + '"></div></div></div>';
+            h += '<div class="drug-dropdown" id="drugDropdown_' + id + '"></div></div>';
+            h += '<div class="drug-guide-links">';
+            h += '<a class="btn-guide" onclick="openDrugGuide(' + id + ')" title="治療薬ガイドで検索">&#x1F4D6; 薬用量ガイド</a>';
+            h += '</div></div>';
             h += '<div class="form-group" style="margin-bottom:0"><label>単価（円）</label>';
             h += '<input type="number" id="drugCost_' + id + '" step="0.01" placeholder="単価" value="' + esc(prefillCost) + '"></div>';
             h += '<div class="form-group" style="margin-bottom:0"><label>含有量（mg/錠）</label>';
@@ -1208,7 +1239,10 @@
             rhtml += '<table class="result-table">';
             rhtml += '<thead><tr><th>項目</th><th>内訳</th><th>金額</th></tr></thead><tbody>';
             results.forEach(function(r) {
-                rhtml += '<tr><td>' + r.item + '</td><td>' + r.detail + '</td>';
+                var itemHtml = r.item.replace(/（(.+?)）/, function(match, name) {
+                    return '（<a class="result-drug-link" onclick="openDrugGuideByName(\'' + name.replace(/'/g, "\\'") + '\')" title="薬用量ガイドで確認">' + esc(name) + '</a>）';
+                });
+                rhtml += '<tr><td>' + itemHtml + '</td><td>' + r.detail + '</td>';
                 rhtml += '<td style="text-align:right;">' + r.amount.toLocaleString() + '円</td></tr>';
             });
             rhtml += '</tbody></table>';
@@ -1217,6 +1251,15 @@
                     + '\uD83C\uDF3F 長期処方割引適用中：技術料（処方料・分包料・分割料）は' + FEE_CAP_DAYS + '日分を上限としています</div>';
             }
             rhtml += '<div class="total-cost">\u5185\u670D\u85AC@' + totalDisplay + '</div>';
+
+            // ========== 薬用量ガイドリンク ==========
+            rhtml += '<div style="margin-top:12px;background:#fff8e1;border:1px solid #ffcc02;border-radius:8px;padding:10px 12px;">';
+            rhtml += '<div style="font-size:12px;font-weight:600;color:#e65100;margin-bottom:6px;">&#x1F4D6; 薬用量ガイド（eduone.jp）</div>';
+            rhtml += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+            validDrugs.forEach(function(d) {
+                rhtml += '<a class="btn-guide" style="font-size:11px;padding:4px 10px;" onclick="openDrugGuideByName(\'' + d.name.replace(/'/g, "\\'") + '\')">' + esc(d.name) + ' →</a>';
+            });
+            rhtml += '</div></div>';
 
             rhtml += '<div style="margin-top:12px;font-size:13px;font-weight:600;">カルテ貼付用テキスト <span style="font-weight:400;color:#888;font-size:11px;">（クリックでコピー）</span></div>';
             rhtml += '<div class="prescription-output" onclick="copyPrescription()">';
