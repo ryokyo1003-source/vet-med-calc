@@ -545,6 +545,10 @@
             }
 
             // 残りのテキストから薬剤名を検出
+            // 「と」「や」「それと」「あと」などの接続詞でも分割
+            text = text.replace(/それと|それから|あと(?!ピ)/g, ' '); // 「あとピカ」等の薬剤名を保護
+            text = text.replace(/([\u30A0-\u30FF\u3040-\u309F\u4E00-\u9FFF])[とや]([\u30A0-\u30FF\u3040-\u309F\u4E00-\u9FFF])/g, '$1 $2');
+            text = text.replace(/\b(を|で|に|は|が|も|の|から|まで|ください|お願い|します|して)\b/g, ' ');
             var words = text.split(/[\s\u3000]+/).filter(function(w) { return w.length >= 2; });
             // 連続する単語を結合しながら薬剤名を検索
             var usedIndices = {};
