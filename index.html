@@ -769,27 +769,47 @@
         // =========================================
         // CSV読み込み
         // =========================================
+        function parseCSVContent(text) {
+            var lines = text.split(/\r?\n/);
+            var results = [];
+            lines.forEach(function(line, index) {
+                if (!line.trim()) return;
+                if (index === 0 && (line.includes('薬剤名') || line.includes('名前'))) return;
+                var parts = line.split(',');
+                if (parts.length >= 3) {
+                    var name = parts[0].trim();
+                    var formulation = parts[1] ? parts[1].trim() : '';
+                    var price = parseFloat(parts[2].trim());
+                    var contentMg = parts[3] ? parseFloat(parts[3].trim()) : 0;
+                    if (name && !isNaN(price) && price > 0) {
+                        results.push({ name: name, formulation: formulation, price: price, contentMg: contentMg || 0 });
+                    }
+                }
+            });
+            return results;
+        }
+
         function processCSVFile(file) {
             if (!file) return;
             var reader = new FileReader();
             reader.onload = function(e) {
                 try {
-                    var lines = e.target.result.split(/\r?\n/);
-                    drugDatabase = [];
-                    lines.forEach(function(line, index) {
-                        if (!line.trim()) return;
-                        if (index === 0 && (line.includes('薬剤名') || line.includes('名前'))) return;
-                        var parts = line.split(',');
-                        if (parts.length >= 3) {
-                            var name = parts[0].trim();
-                            var formulation = parts[1] ? parts[1].trim() : '';
-                            var price = parseFloat(parts[2].trim());
-                            var contentMg = parts[3] ? parseFloat(parts[3].trim()) : 0;
-                            if (name && !isNaN(price) && price > 0) {
-                                drugDatabase.push({ name: name, formulation: formulation, price: price, contentMg: contentMg || 0 });
-                            }
+                    var buf = e.target.result;
+                    var text;
+                    // UTF-8 BOM検出
+                    var bytes = new Uint8Array(buf);
+                    if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+                        text = new TextDecoder('utf-8').decode(buf);
+                    } else {
+                        // まずUTF-8で試す
+                        text = new TextDecoder('utf-8').decode(buf);
+                        // 文字化け判定: U+FFFDがあるか、日本語文字が含まれていないか
+                        if (text.includes('\uFFFD') || !/[\u3000-\u9FFF]/.test(text)) {
+                            // Shift-JISで再試行
+                            text = new TextDecoder('shift-jis').decode(buf);
                         }
-                    });
+                    }
+                    drugDatabase = parseCSVContent(text);
                     if (drugDatabase.length === 0) throw new Error('有効な薬剤データなし');
                     document.getElementById('csvStatus').innerHTML =
                         '<div class="csv-status">' + drugDatabase.length + '件の薬剤を読み込みました</div>';
@@ -802,7 +822,7 @@
                 }
             };
             reader.onerror = function() { showAlert('ファイル読み込み失敗', 'danger'); };
-            reader.readAsText(file, 'UTF-8');
+            reader.readAsArrayBuffer(file);
         }
 
         function setupDropZone() {
