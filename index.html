@@ -345,7 +345,7 @@
                     <div class="drop-zone-compact" id="dropZone">
                         CSVをドロップ or クリック
                     </div>
-                    <input type="file" id="csvFile" accept=".csv,.txt" style="display:none;">
+                    <input type="file" id="csvFile" accept=".csv,.txt,text/csv,text/plain,application/csv" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0;">
                 </div>
             </div>
 
@@ -802,6 +802,7 @@
                     var text;
                     // UTF-8 BOM検出
                     var bytes = new Uint8Array(buf);
+                    if (bytes.length === 0) throw new Error('ファイルが空です');
                     if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
                         text = new TextDecoder('utf-8').decode(buf);
                     } else {
@@ -824,22 +825,46 @@
                 } catch (err) {
                     showAlert('CSV読み込み失敗: ' + err.message, 'danger');
                 }
+                // 同じファイルを再選択できるようリセット
+                var fi = document.getElementById('csvFile');
+                if (fi) fi.value = '';
             };
-            reader.onerror = function() { showAlert('ファイル読み込み失敗', 'danger'); };
+            reader.onerror = function() {
+                showAlert('ファイル読み込み失敗', 'danger');
+                var fi = document.getElementById('csvFile');
+                if (fi) fi.value = '';
+            };
             reader.readAsArrayBuffer(file);
         }
 
         function setupDropZone() {
             var dz = document.getElementById('dropZone');
             var fi = document.getElementById('csvFile');
-            dz.addEventListener('click', function(e) { e.stopPropagation(); fi.click(); });
-            fi.addEventListener('change', function(e) { if (e.target.files[0]) processCSVFile(e.target.files[0]); });
+            if (!dz || !fi) return;
+
+            // クリックでファイル選択ダイアログを開く
+            dz.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                // 同じファイルを再選択可能にする
+                fi.value = '';
+                fi.click();
+            });
+
+            fi.addEventListener('change', function(e) {
+                if (e.target.files && e.target.files[0]) processCSVFile(e.target.files[0]);
+            });
+
+            // ドラッグ＆ドロップ
             dz.addEventListener('dragover', function(e) { e.preventDefault(); e.stopPropagation(); dz.classList.add('dragover'); });
             dz.addEventListener('dragleave', function(e) { e.preventDefault(); e.stopPropagation(); dz.classList.remove('dragover'); });
             dz.addEventListener('drop', function(e) {
                 e.preventDefault(); e.stopPropagation(); dz.classList.remove('dragover');
-                if (e.dataTransfer.files.length > 0) processCSVFile(e.dataTransfer.files[0]);
+                var files = e.dataTransfer && e.dataTransfer.files;
+                if (files && files.length > 0) processCSVFile(files[0]);
             });
+
+            // ブラウザのデフォルトファイルオープンを防止
             document.addEventListener('dragover', function(e) { e.preventDefault(); });
             document.addEventListener('drop', function(e) { e.preventDefault(); });
         }
