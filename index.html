@@ -506,7 +506,8 @@
         function parseVoiceInput(transcript) {
             var result = { freq: null, days: null, mode: null, weight: null, drugs: [], raw: transcript };
             var text = transcript.toLowerCase()
-                .replace(/[、。！？!?,，.．]/g, ' ')
+                .replace(/[、。！？!?,，．]/g, ' ')
+                .replace(/(?<!\d)\.(?!\d)/g, ' ')
                 .replace(/\s+/g, ' ').trim();
 
             // 投与回数の検出
@@ -527,7 +528,7 @@
             }
 
             // 体重の検出（〇キロ、〇kg）
-            var weightMatch = text.match(/体重?\s*(\d+\.?\d*|[一二三四五六七八九十]+\.?\d*)\s*(キロ|きろ|kg|キログラム)?/);
+            var weightMatch = text.match(/体重[がはを]?\s*(\d+\.?\d*|[一二三四五六七八九十]+\.?\d*)\s*(キロ|きろ|kg|キログラム)?/);
             if (!weightMatch) weightMatch = text.match(/(\d+\.?\d*)\s*(キロ|きろ|kg|キログラム)/);
             if (weightMatch) {
                 var w = parseJapaneseNumber(weightMatch[1]);
@@ -548,7 +549,7 @@
             // 「と」「や」「それと」「あと」などの接続詞でも分割
             text = text.replace(/それと|それから|あと(?!ピ)/g, ' '); // 「あとピカ」等の薬剤名を保護
             text = text.replace(/([\u30A0-\u30FF\u3040-\u309F\u4E00-\u9FFF])[とや]([\u30A0-\u30FF\u3040-\u309F\u4E00-\u9FFF])/g, '$1 $2');
-            text = text.replace(/\b(を|で|に|は|が|も|の|から|まで|ください|お願い|します|して)\b/g, ' ');
+            text = text.replace(/(を|で|に|は|が|も|の|から|まで|ください|お願い|します|して)(?=\s|$|[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF])/g, ' ');
             var words = text.split(/[\s\u3000]+/).filter(function(w) { return w.length >= 2; });
             // 連続する単語を結合しながら薬剤名を検索
             var usedIndices = {};
