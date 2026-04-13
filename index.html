@@ -482,9 +482,15 @@
         // 薬剤名のファジーマッチ
         function fuzzyMatchDrug(spoken) {
             if (drugDatabase.length === 0) return null;
+            // 前処理: 空白・助詞・数値+単位を除去
             spoken = spoken.toLowerCase().replace(/[\s\u3000]/g, '');
+            spoken = spoken.replace(/[をでにはがもの]/g, '');
+            spoken = spoken.replace(/\d+\.?\d*(mg|μg|ug|mcg|ml|kg|錠)?/gi, '');
+            spoken = spoken.trim();
 
-            // 完全一致（数字なし基底名で）
+            if (spoken.length < 2) return null;
+
+            // 完全一致
             var exact = drugDatabase.find(function(d) {
                 return d.name.toLowerCase().replace(/[\s\u3000]/g, '') === spoken;
             });
@@ -498,6 +504,14 @@
                 var dn = d.name.toLowerCase().replace(/[\s\u3000]/g, '');
                 return dn.indexOf(baseName) === 0 || dn.includes(baseName);
             });
+
+            // baseNameで見つからない場合、spokenが薬剤名に含まれるか逆も試す
+            if (candidates.length === 0) {
+                candidates = drugDatabase.filter(function(d) {
+                    var dn = d.name.toLowerCase().replace(/[\s\u3000\d]+(mg|μg|ug|ml|mcg|錠)?/gi, '').replace(/[\s\u3000]/g, '');
+                    return spoken.includes(dn) || dn.includes(spoken);
+                });
+            }
 
             if (candidates.length === 0) return null;
 
@@ -549,10 +563,15 @@
             }
 
             // 残りのテキストから薬剤名を検出
+            // 数値+単位を除去（5kg, 20mg等）
+            text = text.replace(/\d+\.?\d*\s*(mg|μg|ug|mcg|ml|kg|キロ|キログラム|グラム|ミリ)/gi, ' ');
             // 「と」「や」「それと」「あと」などの接続詞でも分割
             text = text.replace(/それと|それから|あと(?!ピ)/g, ' '); // 「あとピカ」等の薬剤名を保護
             text = text.replace(/([\u30A0-\u30FF\u3040-\u309F\u4E00-\u9FFF])[とや]([\u30A0-\u30FF\u3040-\u309F\u4E00-\u9FFF])/g, '$1 $2');
-            text = text.replace(/(を|で|に|は|が|も|の|から|まで|ください|お願い|します|して)(?=\s|$|[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF])/g, ' ');
+            // 助詞・丁寧表現を除去
+            text = text.replace(/(を|です|で|に|は|が|も|の|から|まで|ください|お願い|します|して|ほしい|ちょうだい|ではなく|じゃなく|じゃなくて)(?=\s|$|[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\d])/g, ' ');
+            // 「パー」（per）等のノイズ除去
+            text = text.replace(/パー\s*キロ|パーキロ|スーパー/g, ' ');
             var words = text.split(/[\s\u3000]+/).filter(function(w) { return w.length >= 2; });
             // 連続する単語を結合しながら薬剤名を検索
             var usedIndices = {};
