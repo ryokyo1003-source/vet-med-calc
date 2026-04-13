@@ -795,6 +795,20 @@
 
         function processCSVFile(file) {
             if (!file) return;
+            // ファイル形式チェック
+            var ext = file.name.split('.').pop().toLowerCase();
+            if (ext === 'numbers') {
+                showAlert('⚠️ .numbersファイルは読み込めません。Numbersで開いて「ファイル→書き出す→CSV」で保存してください。', 'danger');
+                return;
+            }
+            if (ext === 'xlsx' || ext === 'xls') {
+                showAlert('⚠️ Excelファイルは読み込めません。Excelで開いて「名前を付けて保存→CSV」で保存してください。', 'danger');
+                return;
+            }
+            if (ext !== 'csv' && ext !== 'txt' && ext !== 'tsv') {
+                showAlert('⚠️ CSVファイル（.csv/.txt）を選択してください。', 'danger');
+                return;
+            }
             var reader = new FileReader();
             reader.onload = function(e) {
                 try {
@@ -802,6 +816,10 @@
                     var text;
                     var bytes = new Uint8Array(buf);
                     if (bytes.length === 0) throw new Error('ファイルが空です');
+                    // ZIP形式（.numbers/.xlsx等）の検出: PKヘッダー
+                    if (bytes[0] === 0x50 && bytes[1] === 0x4B) {
+                        throw new Error('バイナリファイルです。CSVに書き出してから読み込んでください。');
+                    }
                     // UTF-8 BOM検出 → BOMありならUTF-8確定
                     if (bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
                         text = new TextDecoder('utf-8').decode(buf);
@@ -814,7 +832,7 @@
                         }
                     }
                     drugDatabase = parseCSVContent(text);
-                    if (drugDatabase.length === 0) throw new Error('有効な薬剤データなし');
+                    if (drugDatabase.length === 0) throw new Error('有効な薬剤データなし（4列:薬剤名,剤型,単価,含有量）');
                     document.getElementById('csvStatus').innerHTML =
                         '<div class="csv-status">' + drugDatabase.length + '件の薬剤を読み込みました</div>';
                     document.getElementById('csvStatusSmall').textContent = '(' + drugDatabase.length + '件)';
