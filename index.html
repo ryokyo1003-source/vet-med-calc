@@ -261,6 +261,9 @@
                     <div class="voice-parsed" id="voiceParsed" style="display:none;"></div>
                 </div>
 
+                <!-- オールクリア -->
+                <button onclick="clearAll()" style="width:100%;padding:10px;margin-bottom:12px;background:#dc3545;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:0.5px;">オールクリア</button>
+
                 <!-- 基本設定 -->
                 <div class="card">
                     <h2>基本設定</h2>
@@ -1713,6 +1716,36 @@
                 updateHistory();
                 showAlert('履歴クリア', 'success');
             }
+        }
+
+        // =========================================
+        // オールクリア（CSV・テンプレートは保持）
+        // =========================================
+        function clearAll() {
+            // 基本設定リセット
+            document.getElementById('frequency').value = '2';
+            document.getElementById('days').value = '7';
+            document.getElementById('weight').value = '5.0';
+            setMode('powder');
+            // 調剤オプションリセット
+            document.getElementById('useBunpo').checked = true;
+            document.getElementById('useSyrup').checked = false;
+            document.getElementById('useCapsule').checked = false;
+            // 薬剤行を全消去して1行追加
+            drugCounter = 0;
+            document.getElementById('drugsList').innerHTML = '';
+            addDrugRow();
+            // 音声入力表示クリア
+            var vt = document.getElementById('voiceTranscript');
+            var vp = document.getElementById('voiceParsed');
+            if (vt) { vt.textContent = ''; vt.style.display = 'none'; }
+            if (vp) { vp.innerHTML = ''; vp.style.display = 'none'; }
+            // 前回処方テキストクリア
+            var it = document.getElementById('importText');
+            if (it) it.value = '';
+            // 計算結果クリア
+            document.getElementById('results').innerHTML = '<p style="color:#999;font-size:12px;text-align:center;margin-top:40px;">薬剤を入力すると自動で計算されます</p>';
+            showAlert('入力をクリアしました', 'success');
         }
 
         // =========================================
