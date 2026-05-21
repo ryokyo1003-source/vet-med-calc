@@ -299,6 +299,10 @@
                             <input type="checkbox" id="useBunpo" checked>
                             <label for="useBunpo">分包機（+30円/回）</label>
                         </div>
+                        <div class="checkbox-item" id="longTermDiscountOption">
+                            <input type="checkbox" id="useLongTermDiscount" checked>
+                            <label for="useLongTermDiscount">長期処方割引（技術料14日上限）</label>
+                        </div>
                         <div class="checkbox-item" id="syrupOption">
                             <input type="checkbox" id="useSyrup">
                             <label for="useSyrup">シロップ（+500円）</label>
@@ -1492,10 +1496,11 @@
             var totalCost = 0;
 
             // ========== 長期処方キャップ（技術料は最大14日分まで） ==========
+            var useLongTermDiscount = document.getElementById('useLongTermDiscount').checked;
             var FEE_CAP_DAYS = 14;
-            var cappedDays = Math.min(days, FEE_CAP_DAYS);
-            var cappedDoses = Math.min(totalDoses, frequency * FEE_CAP_DAYS);
-            var isLongTerm = days > FEE_CAP_DAYS;
+            var cappedDays = useLongTermDiscount ? Math.min(days, FEE_CAP_DAYS) : days;
+            var cappedDoses = useLongTermDiscount ? Math.min(totalDoses, frequency * FEE_CAP_DAYS) : totalDoses;
+            var isLongTerm = useLongTermDiscount && days > FEE_CAP_DAYS;
 
             // ========== 処方料（1剤目80円/日、2剤目以降40円/日、別処方は80円/日） ==========
             var prescriptionFee = 0;
@@ -1748,6 +1753,7 @@
             setMode('powder');
             // 調剤オプションリセット
             document.getElementById('useBunpo').checked = true;
+            document.getElementById('useLongTermDiscount').checked = true;
             document.getElementById('useSyrup').checked = false;
             document.getElementById('useCapsule').checked = false;
             // 薬剤行を全消去して1行追加
@@ -1807,7 +1813,7 @@
                     el.addEventListener('change', function() { scheduleCalc(); triggerAllAutoCalc(); });
                 }
             });
-            ['useBunpo', 'useSyrup', 'useCapsule'].forEach(function(id) {
+            ['useBunpo', 'useLongTermDiscount', 'useSyrup', 'useCapsule'].forEach(function(id) {
                 var el = document.getElementById(id);
                 if (el) el.addEventListener('change', scheduleCalc);
             });
@@ -2034,6 +2040,7 @@
                 frequency: parseInt(document.getElementById('frequency').value),
                 days: parseInt(document.getElementById('days').value),
                 useBunpo: document.getElementById('useBunpo').checked,
+                useLongTermDiscount: document.getElementById('useLongTermDiscount').checked,
                 useSyrup: document.getElementById('useSyrup').checked,
                 useCapsule: document.getElementById('useCapsule').checked,
                 drugs: drugs,
@@ -2064,6 +2071,7 @@
             if (tpl.frequency) document.getElementById('frequency').value = tpl.frequency;
             if (tpl.days) document.getElementById('days').value = tpl.days;
             if (tpl.useBunpo !== undefined) document.getElementById('useBunpo').checked = tpl.useBunpo;
+            if (tpl.useLongTermDiscount !== undefined) document.getElementById('useLongTermDiscount').checked = tpl.useLongTermDiscount;
             if (tpl.useSyrup !== undefined) document.getElementById('useSyrup').checked = tpl.useSyrup;
             if (tpl.useCapsule !== undefined) document.getElementById('useCapsule').checked = tpl.useCapsule;
 
