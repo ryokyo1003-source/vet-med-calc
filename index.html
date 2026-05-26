@@ -1044,7 +1044,9 @@
                         var actualMg = tabs * c;
                         var totalDevPct = ((actualMg - total) / total * 100);
                         var totalDevSign = totalDevPct >= 0 ? '+' : '';
-                        info.innerHTML = '1回: ' + single.toFixed(2) + 'mg (' + (single/c).toFixed(2) + '錠分) / 総量: ' + total.toFixed(1) + 'mg → ' + tabs + '錠（' + actualMg.toFixed(1) + 'mg, ' + totalDevSign + totalDevPct.toFixed(1) + '%）';
+                        var actualPerDose = actualMg / (f * dy);
+                        var actualMgKg = actualPerDose / w;
+                        info.innerHTML = '1回: ' + single.toFixed(2) + 'mg (' + (single/c).toFixed(2) + '錠分) / 総量: ' + total.toFixed(1) + 'mg → ' + tabs + '錠（' + actualMg.toFixed(1) + 'mg, ' + totalDevSign + totalDevPct.toFixed(1) + '%） / 実投与: ' + actualMgKg.toFixed(2) + 'mg/kg';
                         if (Math.abs(totalDevPct) >= 10) {
                             info.innerHTML += '<div style="background:#fee;color:#c41e3a;padding:6px 10px;border-radius:5px;margin-top:6px;font-weight:600;font-size:12px;">'
                                 + '\u26A0 目標用量との乖離が10%を超えています（' + totalDevSign + totalDevPct.toFixed(1) + '%）。錠数を手動調整するか別剤型を検討してください</div>';
@@ -1055,7 +1057,7 @@
                         var related = findRelatedFormulations(drugName);
                         if (related.length >= 1 && single > 0) {
                             var combo = findOptimalCombination(single, related);
-                            renderOptimalCombo(single, combo, 'drugOptimalCombo_' + id);
+                            renderOptimalCombo(single, combo, 'drugOptimalCombo_' + id, w, actualMgKg);
                         } else if (comboEl) {
                             comboEl.style.display = 'none';
                         }
@@ -1352,7 +1354,7 @@
             return { canDispense: true, method: '分割なし', splitType: 'none' };
         }
 
-        function renderOptimalCombo(targetMg, combination, containerId) {
+        function renderOptimalCombo(targetMg, combination, containerId, weight, currentPowderMgKg) {
             var el = document.getElementById(containerId);
             if (!el) return;
             if (!combination || !combination.items || combination.items.length === 0) {
@@ -1361,7 +1363,17 @@
             }
 
             var h = '';
-            h += '<div class="combo-header">最適組み合わせ（1回量 ' + targetMg.toFixed(1) + 'mg 目標）</div>';
+            var targetMgKg = (weight && weight > 0) ? (targetMg / weight) : null;
+            h += '<div class="combo-header">最適組み合わせ（1回量 ' + targetMg.toFixed(1) + 'mg';
+            if (targetMgKg !== null) h += ' / ' + targetMgKg.toFixed(2) + 'mg/kg';
+            h += ' 目標）</div>';
+
+            if (currentPowderMgKg !== undefined && currentPowderMgKg !== null && isFinite(currentPowderMgKg)) {
+                h += '<div class="combo-item" style="color:#666;font-size:12px;">';
+                h += '<span>現在の散剤の実投与</span>';
+                h += '<span>' + currentPowderMgKg.toFixed(2) + 'mg/kg</span>';
+                h += '</div>';
+            }
 
             combination.items.forEach(function(item) {
                 var qtyText;
@@ -1387,6 +1399,9 @@
 
             h += '<div class="combo-summary">';
             h += '\u5408\u8A08: ' + combination.totalMg.toFixed(1) + 'mg';
+            if (weight && weight > 0) {
+                h += ' (' + (combination.totalMg / weight).toFixed(2) + 'mg/kg)';
+            }
             var sign = combination.deviation >= 0 ? '+' : '';
             h += '\uFF08\u4E56\u96E2: ' + sign + combination.deviationPct.toFixed(1) + '%\uFF09';
             h += '</div>';
