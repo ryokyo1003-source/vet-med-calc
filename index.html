@@ -1643,10 +1643,22 @@
                 if (useBunpo) {
                     rxText += 'TAB ' + totalDoses + '\u5206\u5305\u3000' + freqText + ' ' + days + '\u65E5\u5206';
                 } else {
+                    // お渡し個数 = ceil(1回量) × 総回数 を薬剤ごとに集計
+                    // 例: 1/4t × 14回 = 1個/回 × 14回 = 14ヶ（cost用のtabletsUsed=4錠とは別概念）
                     var totalTabsAll = 0;
-                    validDrugs.forEach(function(d) { totalTabsAll += d.tabletsUsed; });
+                    validDrugs.forEach(function(d) {
+                        var piecesPerDose = Math.ceil(d.amountPerDose);
+                        totalTabsAll += piecesPerDose * totalDoses;
+                    });
                     rxText += 'TAB ' + totalTabsAll + '\u30F6 ' + freqText + ' ' + days + '\u65E5\u5206';
                 }
+            }
+
+            // 分包機使用有無を明記
+            if (useBunpo) {
+                rxText += '\n\u3010\u5206\u5305\u6A5F\u4F7F\u7528\u3011';
+            } else {
+                rxText += '\n\u3010\u5206\u5305\u6A5F\u672A\u4F7F\u7528\uFF1A\u30C1\u30E3\u30C3\u30AF\u4ED8\u304D\u888B\u306B\u307E\u3068\u3081\u3066\u304A\u6E21\u3057\u3011';
             }
 
             // ========== 結果HTML ==========
