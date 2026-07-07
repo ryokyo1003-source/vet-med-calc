@@ -747,13 +747,11 @@
             });
             var isPowder = mode === 'powder';
             // 散剤モード: 分包は常にON（非表示）、シロップ・カプセル表示
-            // 錠剤モード: 分包チェック表示、シロップ・カプセル非表示
-            document.getElementById('bunpoOption').style.display = isPowder ? 'none' : 'flex';
+            // 錠剤モード: シート/チャック付き袋で自動振分のため分包機は使用不可（非表示・OFF）
+            document.getElementById('bunpoOption').style.display = 'none';
             document.getElementById('syrupOption').style.display = isPowder ? 'flex' : 'none';
             document.getElementById('capsuleOption').style.display = isPowder ? 'flex' : 'none';
-            if (isPowder) {
-                document.getElementById('useBunpo').checked = true;
-            }
+            document.getElementById('useBunpo').checked = isPowder;
             if (!isPowder) {
                 document.getElementById('useSyrup').checked = false;
                 document.getElementById('useCapsule').checked = false;
@@ -1439,7 +1437,7 @@
             var frequency = parseInt(document.getElementById('frequency').value);
             var days = parseInt(document.getElementById('days').value);
             var weight = parseFloat(document.getElementById('weight').value) || 0;
-            var useBunpo = currentMode === 'powder' ? true : document.getElementById('useBunpo').checked;
+            var useBunpo = currentMode === 'powder';
             var useSyrup = document.getElementById('useSyrup').checked;
             var useCapsule = document.getElementById('useCapsule').checked;
             if (isNaN(frequency) || frequency <= 0 || isNaN(days) || days <= 0) {
