@@ -1654,8 +1654,17 @@
                 }
             }
 
-            // 分包機使用有無を明記
-            if (useBunpo) {
+            // 処方形態を明記（錠剤モードは分割の有無で自動割り振り）
+            if (currentMode === 'tablet') {
+                var hasFractional = validDrugs.some(function(d) {
+                    return Math.abs(d.amountPerDose - Math.round(d.amountPerDose)) > 0.001;
+                });
+                if (hasFractional) {
+                    rxText += '\n\u3010\u30C1\u30E3\u30C3\u30AF\u4ED8\u304D\u888B\u3067\u304A\u6E21\u3057\u3011';
+                } else {
+                    rxText += '\n\u3010\u30B7\u30FC\u30C8\u3067\u304A\u6E21\u3057\u3011';
+                }
+            } else if (useBunpo) {
                 rxText += '\n\u3010\u5206\u5305\u6A5F\u4F7F\u7528\u3011';
             } else {
                 rxText += '\n\u3010\u5206\u5305\u6A5F\u672A\u4F7F\u7528\uFF1A\u30C1\u30E3\u30C3\u30AF\u4ED8\u304D\u888B\u306B\u307E\u3068\u3081\u3066\u304A\u6E21\u3057\u3011';
