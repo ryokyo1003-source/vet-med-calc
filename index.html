@@ -746,9 +746,8 @@
                 btn.classList.toggle('active', btn.dataset.mode === mode);
             });
             var isPowder = mode === 'powder';
-            // 散剤モード: 分包は常にON（非表示）、シロップ・カプセル表示
-            // 錠剤モード: シート/チャック付き袋で自動振分のため分包機は使用不可（非表示・OFF）
-            document.getElementById('bunpoOption').style.display = 'none';
+            // 分包機は両モードで選択可能。デフォルトは散剤ON・錠剤OFF
+            document.getElementById('bunpoOption').style.display = 'flex';
             document.getElementById('syrupOption').style.display = isPowder ? 'flex' : 'none';
             document.getElementById('capsuleOption').style.display = isPowder ? 'flex' : 'none';
             document.getElementById('useBunpo').checked = isPowder;
@@ -1437,7 +1436,7 @@
             var frequency = parseInt(document.getElementById('frequency').value);
             var days = parseInt(document.getElementById('days').value);
             var weight = parseFloat(document.getElementById('weight').value) || 0;
-            var useBunpo = currentMode === 'powder';
+            var useBunpo = document.getElementById('useBunpo').checked;
             var useSyrup = document.getElementById('useSyrup').checked;
             var useCapsule = document.getElementById('useCapsule').checked;
             if (isNaN(frequency) || frequency <= 0 || isNaN(days) || days <= 0) {
@@ -1652,8 +1651,11 @@
                 }
             }
 
-            // 処方形態を明記（錠剤モードは分割の有無で自動割り振り）
-            if (currentMode === 'tablet') {
+            // 処方形態を明記
+            // 錠剤モード: 分包機ON=分包、OFF=分割有無でシート/チャック付き袋を自動振分
+            if (useBunpo) {
+                rxText += '\n\u3010\u5206\u5305\u6A5F\u4F7F\u7528\u3011';
+            } else if (currentMode === 'tablet') {
                 var hasFractional = validDrugs.some(function(d) {
                     return Math.abs(d.amountPerDose - Math.round(d.amountPerDose)) > 0.001;
                 });
@@ -1662,8 +1664,6 @@
                 } else {
                     rxText += '\n\u3010\u30B7\u30FC\u30C8\u3067\u304A\u6E21\u3057\u3011';
                 }
-            } else if (useBunpo) {
-                rxText += '\n\u3010\u5206\u5305\u6A5F\u4F7F\u7528\u3011';
             } else {
                 rxText += '\n\u3010\u5206\u5305\u6A5F\u672A\u4F7F\u7528\uFF1A\u30C1\u30E3\u30C3\u30AF\u4ED8\u304D\u888B\u306B\u307E\u3068\u3081\u3066\u304A\u6E21\u3057\u3011';
             }
